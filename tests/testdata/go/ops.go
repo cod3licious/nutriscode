@@ -52,3 +52,10 @@ type MyStruct struct{}
 func (s MyStruct) method(x int) int {
 	return x * 2
 }
+
+func boilerplate(data int) int {
+	x := data
+	y := x
+	z := y
+	return z
+}

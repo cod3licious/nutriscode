@@ -63,17 +63,16 @@ def _make_python_config() -> LanguageConfig:
         class_name_field="name",
         statement_node_types=frozenset(
             [
+                # In Python tree-sitter, assignment/augmented_assignment/yield are always
+                # children of expression_statement, so we only count expression_statement
+                # to avoid double-counting.
                 "expression_statement",
-                "assignment",
-                "augmented_assignment",
-                "annotated_assignment",
                 "return_statement",
                 "delete_statement",
                 "pass_statement",
                 "break_statement",
                 "continue_statement",
                 "raise_statement",
-                "yield",
                 "global_statement",
                 "nonlocal_statement",
                 "import_statement",

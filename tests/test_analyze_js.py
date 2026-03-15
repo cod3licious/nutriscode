@@ -6,99 +6,117 @@ from analyze_repo import analyze_codebase
 
 TESTDATA = Path(__file__).parent / "testdata" / "js"
 
+ZEROS = {
+    "statement_count": 0,
+    "math_ops": 0,
+    "bitwise_ops": 0,
+    "conditionals": 0,
+    "logical_ops": 0,
+    "comparisons": 0,
+    "calls": 0,
+    "assertions": 0,
+    "exception_handlers": 0,
+}
+
+
+def _expect(results, name, **overrides):
+    """Assert all metrics match. Unspecified fields default to 0."""
+    assert results[name] == {**ZEROS, **overrides}
+
 
 @pytest.fixture(scope="module")
 def results():
     return analyze_codebase(TESTDATA, "ts")
 
 
+# ---------------------------------------------------------------------------
+# ops.js — operator categories
+# ---------------------------------------------------------------------------
+
+
 def test_math_ops(results):
-    fn = results["ops.mathOps"]
-    assert fn["statement_count"] == 3
-    assert fn["math_ops"] == 3
+    _expect(results, "ops.mathOps", statement_count=3, math_ops=3)
 
 
 def test_bitwise_ops(results):
-    fn = results["ops.bitwiseOps"]
-    assert fn["bitwise_ops"] == 2
-    assert fn["math_ops"] == 0
+    _expect(results, "ops.bitwiseOps", statement_count=2, bitwise_ops=2)
 
 
 def test_comparisons(results):
-    fn = results["ops.comparisons"]
-    assert fn["comparisons"] == 1
-    assert fn["conditionals"] == 1
+    _expect(results, "ops.comparisons", statement_count=3, conditionals=1, comparisons=1)
 
 
 def test_logical_ops(results):
-    fn = results["ops.logicalOps"]
-    assert fn["logical_ops"] == 3
+    _expect(results, "ops.logicalOps", statement_count=1, logical_ops=3)
 
 
 def test_conditionals(results):
-    fn = results["ops.conditionals"]
-    assert fn["conditionals"] == 3
-    assert fn["comparisons"] == 2
+    # if/else if/else → 3 conditionals; x > 0 and x < 0 → 2 comparisons; -x → 1 math
+    _expect(results, "ops.conditionals", statement_count=5, conditionals=3, comparisons=2, math_ops=1)
+
+
+# ---------------------------------------------------------------------------
+# ops.js — call counting
+# ---------------------------------------------------------------------------
 
 
 def test_calls_zero(results):
-    fn = results["ops.callsZero"]
-    assert fn["calls"] == 0
+    _expect(results, "ops.callsZero", statement_count=1)
 
 
 def test_calls_one(results):
-    fn = results["ops.callsOne"]
-    assert fn["calls"] == 1
+    _expect(results, "ops.callsOne", statement_count=2, calls=1)
 
 
 def test_calls_two(results):
-    fn = results["ops.callsTwo"]
-    assert fn["calls"] == 2
+    _expect(results, "ops.callsTwo", statement_count=2, calls=2)
 
 
 def test_calls_three(results):
-    fn = results["ops.callsThree"]
-    assert fn["calls"] == 3
+    _expect(results, "ops.callsThree", statement_count=3, calls=3)
+
+
+# ---------------------------------------------------------------------------
+# ops.js — exceptions, arrow, class
+# ---------------------------------------------------------------------------
 
 
 def test_exception_handlers(results):
-    fn = results["ops.withException"]
-    assert fn["exception_handlers"] == 2
+    _expect(results, "ops.withException", statement_count=4, calls=3, exception_handlers=2)
 
 
 def test_arrow_function_inline(results):
-    fn = results["ops.withArrow"]
-    assert fn["math_ops"] == 1  # x + 1 in arrow body
+    # return items.map(x => x + 1) — map is a call, x + 1 from arrow body counted inline
+    _expect(results, "ops.withArrow", statement_count=1, math_ops=1, calls=1)
 
 
 def test_class_method_dotted_path(results):
-    assert "ops.MyClass.method" in results
-    fn = results["ops.MyClass.method"]
-    assert fn["math_ops"] == 1
+    _expect(results, "ops.MyClass.method", statement_count=1, math_ops=1)
+
+
+def test_boilerplate(results):
+    _expect(results, "ops.boilerplate", statement_count=4)
+
+
+# ---------------------------------------------------------------------------
+# JS/TS family scanning — .ts and .tsx files picked up alongside .js
+# ---------------------------------------------------------------------------
 
 
 def test_ts_file_included(results):
-    # types.ts functions should be picked up
-    assert "types.tsComputations" in results
-    fn = results["types.tsComputations"]
-    assert fn["math_ops"] == 2
+    _expect(results, "types.tsComputations", statement_count=1, math_ops=2)
 
 
 def test_ts_class_method(results):
-    assert "types.TypedClass.compute" in results
-    fn = results["types.TypedClass.compute"]
-    assert fn["math_ops"] == 1
+    _expect(results, "types.TypedClass.compute", statement_count=1, math_ops=1)
 
 
 def test_tsx_file_included(results):
-    # component.tsx should be picked up
-    assert "component.SimpleComponent" in results
-    fn = results["component.SimpleComponent"]
-    assert fn["comparisons"] == 1
-    assert fn["conditionals"] == 1
+    # value > 0 ? value : 0 — ternary is a conditional, > is a comparison
+    _expect(results, "component.SimpleComponent", statement_count=1, conditionals=1, comparisons=1)
 
 
 def test_min_statements_filtering():
-    results = analyze_codebase(TESTDATA, "ts", min_statements=2)
-    for fn in results.values():
+    filtered = analyze_codebase(TESTDATA, "ts", min_statements=2)
+    for fn in filtered.values():
         assert fn["statement_count"] >= 2

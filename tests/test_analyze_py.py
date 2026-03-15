@@ -6,123 +6,175 @@ from analyze_repo import analyze_codebase
 
 TESTDATA = Path(__file__).parent / "testdata" / "py"
 
+ZEROS = {
+    "statement_count": 0,
+    "math_ops": 0,
+    "bitwise_ops": 0,
+    "conditionals": 0,
+    "logical_ops": 0,
+    "comparisons": 0,
+    "calls": 0,
+    "assertions": 0,
+    "exception_handlers": 0,
+}
+
+
+def _expect(results, name, **overrides):
+    """Assert all metrics match. Unspecified fields default to 0."""
+    assert results[name] == {**ZEROS, **overrides}
+
 
 @pytest.fixture(scope="module")
 def results():
     return analyze_codebase(TESTDATA, "py")
 
 
+# ---------------------------------------------------------------------------
+# ops.py — operator categories
+# ---------------------------------------------------------------------------
+
+
 def test_math_ops(results):
-    fn = results["ops.math_ops"]
-    assert fn["statement_count"] == 5
-    assert fn["math_ops"] == 3
+    # x = a + b; y = x * 2; return y - 1
+    _expect(results, "ops.math_ops", statement_count=3, math_ops=3)
 
 
 def test_bitwise_ops(results):
-    fn = results["ops.bitwise_ops"]
-    assert fn["bitwise_ops"] == 2
-    assert fn["math_ops"] == 0
+    # x = a | b; y = x & 1; return y
+    _expect(results, "ops.bitwise_ops", statement_count=3, bitwise_ops=2)
 
 
 def test_type_union_not_bitwise(results):
-    fn = results["ops.type_union_not_bitwise"]
-    assert fn["bitwise_ops"] == 0
+    # def f(x: int | str, y: float | None) -> bool | None: return x
+    _expect(results, "ops.type_union_not_bitwise", statement_count=1)
 
 
 def test_comparisons(results):
-    fn = results["ops.comparisons"]
-    assert fn["comparisons"] == 1
-    assert fn["conditionals"] == 1
+    # if a == b: return a / return b
+    _expect(results, "ops.comparisons", statement_count=3, conditionals=1, comparisons=1)
 
 
 def test_logical_ops(results):
-    fn = results["ops.logical_ops"]
-    assert fn["logical_ops"] == 3
+    # return (a and b) or not c
+    _expect(results, "ops.logical_ops", statement_count=1, logical_ops=3)
 
 
 def test_conditionals(results):
-    fn = results["ops.conditionals"]
-    assert fn["conditionals"] == 2
-    assert fn["comparisons"] == 2
+    # if x > 0: return x / if x < 0: return -x / return 0
+    _expect(results, "ops.conditionals", statement_count=5, conditionals=2, comparisons=2, math_ops=1)
+
+
+# ---------------------------------------------------------------------------
+# ops.py — call counting
+# ---------------------------------------------------------------------------
 
 
 def test_calls_zero(results):
-    fn = results["ops.calls_zero"]
-    assert fn["calls"] == 0
+    _expect(results, "ops.calls_zero", statement_count=1)
 
 
 def test_calls_one(results):
-    fn = results["ops.calls_one"]
-    assert fn["calls"] == 1
+    _expect(results, "ops.calls_one", statement_count=2, calls=1)
 
 
 def test_calls_two(results):
-    fn = results["ops.calls_two"]
-    assert fn["calls"] == 2
+    _expect(results, "ops.calls_two", statement_count=2, calls=2)
 
 
 def test_calls_three(results):
-    fn = results["ops.calls_three"]
-    assert fn["calls"] == 3
+    _expect(results, "ops.calls_three", statement_count=3, calls=3)
+
+
+# ---------------------------------------------------------------------------
+# ops.py — assertions, exceptions
+# ---------------------------------------------------------------------------
 
 
 def test_assertions(results):
-    fn = results["ops.with_assertion"]
-    assert fn["assertions"] == 1
+    # assert x > 0; return x — assert_statement is not a statement_node_type in Python
+    _expect(results, "ops.with_assertion", statement_count=1, assertions=1, comparisons=1)
 
 
 def test_exception_handlers(results):
-    fn = results["ops.with_exception"]
-    assert fn["exception_handlers"] == 2
+    # try: foo() / except: bar() / finally: baz()
+    _expect(results, "ops.with_exception", statement_count=4, calls=3, exception_handlers=2)
 
 
-def test_nested_inner_is_own_entry(results):
-    assert "ops.nested_inner" in results
+# ---------------------------------------------------------------------------
+# ops.py — nested functions, lambdas, classes
+# ---------------------------------------------------------------------------
+
+
+def test_nested_inner_scored_separately(results):
+    _expect(results, "ops.nested_inner", statement_count=1, math_ops=1)
 
 
 def test_nested_outer_excludes_inner_ops(results):
-    outer = results["ops.nested_outer"]
-    # outer has: y = x + 1 (1 math op), return y (1 stmt), y = x + 1 (1 stmt), nested_inner def (1 stmt)
-    assert outer["math_ops"] == 1
-    # nested_inner's math_ops should NOT be included in outer
-    inner = results["ops.nested_inner"]
-    assert inner["math_ops"] == 1
+    # y = x + 1; return y — nested_inner not counted here
+    _expect(results, "ops.nested_outer", statement_count=2, math_ops=1)
 
 
 def test_lambda_counted_inline(results):
-    fn = results["ops.with_lambda"]
-    assert fn["math_ops"] == 1  # x + 1 in the lambda body
+    # return sorted(items, key=lambda x: x + 1)
+    _expect(results, "ops.with_lambda", statement_count=1, math_ops=1, calls=1)
 
 
 def test_class_method_dotted_path(results):
-    assert "ops.MyClass.method" in results
-    fn = results["ops.MyClass.method"]
-    assert fn["math_ops"] == 1
+    _expect(results, "ops.MyClass.method", statement_count=1, math_ops=1)
 
 
-def test_min_statements_filtering():
-    results = analyze_codebase(TESTDATA, "py", min_statements=3)
-    for fn in results.values():
-        assert fn["statement_count"] >= 3
+# ---------------------------------------------------------------------------
+# ops.py — boilerplate and statement-only functions
+# ---------------------------------------------------------------------------
+
+
+def test_boilerplate(results):
+    # x = data; y = x; z = y; return z — all statements, zero ops
+    _expect(results, "ops.boilerplate", statement_count=4)
+
+
+def test_augmented_assignments(results):
+    # x += 1; x -= 2; return x — no double-counting with expression_statement
+    _expect(results, "ops.augmented_assignments", statement_count=3, math_ops=2)
+
+
+def test_annotated_assignments(results):
+    # x: int = 5; y: str = "hello"; return x, y — annotations don't produce ops
+    _expect(results, "ops.annotated_assignments", statement_count=3)
+
+
+def test_yield(results):
+    # for item in items: yield item + 1
+    _expect(results, "ops.with_yield", statement_count=2, conditionals=1, math_ops=1)
+
+
+# ---------------------------------------------------------------------------
+# loops.py — multi-file scanning + loop counting
+# ---------------------------------------------------------------------------
 
 
 def test_multifile_scanning(results):
-    # ops.py functions present
     assert "ops.math_ops" in results
-    # loops.py functions present
     assert "loops.for_loop" in results
     assert "loops.while_loop" in results
 
 
 def test_for_loop(results):
-    fn = results["loops.for_loop"]
-    assert fn["statement_count"] == 6
-    assert fn["math_ops"] == 1
-    assert fn["conditionals"] == 1
+    # total = 0; for item in items: total += item; return total
+    _expect(results, "loops.for_loop", statement_count=4, math_ops=1, conditionals=1)
 
 
 def test_while_loop(results):
-    fn = results["loops.while_loop"]
-    assert fn["statement_count"] == 8
-    assert fn["math_ops"] == 2
-    assert fn["comparisons"] == 1
+    # result = 1; while n > 0: result *= n; n -= 1; return result
+    _expect(results, "loops.while_loop", statement_count=5, math_ops=2, conditionals=1, comparisons=1)
+
+
+# ---------------------------------------------------------------------------
+# min_statements filtering
+# ---------------------------------------------------------------------------
+
+
+def test_min_statements_filtering():
+    filtered = analyze_codebase(TESTDATA, "py", min_statements=3)
+    for fn in filtered.values():
+        assert fn["statement_count"] >= 3

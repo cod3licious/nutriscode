@@ -82,3 +82,27 @@ def with_lambda(items):
 class MyClass:
     def method(self, x):
         return x * 2
+
+
+def boilerplate(data):
+    x = data
+    y = x
+    z = y
+    return z
+
+
+def augmented_assignments(x):
+    x += 1
+    x -= 2
+    return x
+
+
+def annotated_assignments():
+    x: int = 5
+    y: str = "hello"
+    return x, y
+
+
+def with_yield(items):
+    for item in items:
+        yield item + 1

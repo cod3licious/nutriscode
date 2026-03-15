@@ -6,68 +6,89 @@ from analyze_repo import analyze_codebase
 
 TESTDATA = Path(__file__).parent / "testdata" / "go"
 
+ZEROS = {
+    "statement_count": 0,
+    "math_ops": 0,
+    "bitwise_ops": 0,
+    "conditionals": 0,
+    "logical_ops": 0,
+    "comparisons": 0,
+    "calls": 0,
+    "assertions": 0,
+    "exception_handlers": 0,
+}
+
+
+def _expect(results, name, **overrides):
+    """Assert all metrics match. Unspecified fields default to 0."""
+    assert results[name] == {**ZEROS, **overrides}
+
 
 @pytest.fixture(scope="module")
 def results():
     return analyze_codebase(TESTDATA, "go")
 
 
+# ---------------------------------------------------------------------------
+# ops.go — operator categories
+# ---------------------------------------------------------------------------
+
+
 def test_math_ops(results):
-    fn = results["ops.mathOps"]
-    assert fn["statement_count"] == 3
-    assert fn["math_ops"] == 3
+    _expect(results, "ops.mathOps", statement_count=3, math_ops=3)
 
 
 def test_bitwise_ops(results):
-    fn = results["ops.bitwiseOps"]
-    assert fn["bitwise_ops"] == 2
-    assert fn["math_ops"] == 0
+    _expect(results, "ops.bitwiseOps", statement_count=2, bitwise_ops=2)
 
 
 def test_comparisons(results):
-    fn = results["ops.comparisons"]
-    assert fn["comparisons"] == 1
+    _expect(results, "ops.comparisons", statement_count=1, comparisons=1)
 
 
 def test_logical_ops(results):
-    fn = results["ops.logicalOps"]
-    assert fn["logical_ops"] == 3
+    _expect(results, "ops.logicalOps", statement_count=1, logical_ops=3)
 
 
 def test_conditionals(results):
-    fn = results["ops.conditionals"]
-    assert fn["conditionals"] == 3
-    assert fn["comparisons"] == 2
+    _expect(results, "ops.conditionals", statement_count=5, conditionals=3, comparisons=2, math_ops=1)
+
+
+# ---------------------------------------------------------------------------
+# ops.go — call counting
+# ---------------------------------------------------------------------------
 
 
 def test_calls_zero(results):
-    fn = results["ops.callsZero"]
-    assert fn["calls"] == 0
+    _expect(results, "ops.callsZero", statement_count=1)
 
 
 def test_calls_one(results):
-    fn = results["ops.callsOne"]
-    assert fn["calls"] == 1
+    _expect(results, "ops.callsOne", statement_count=1, calls=1)
 
 
 def test_calls_two(results):
-    fn = results["ops.callsTwo"]
-    assert fn["calls"] == 2
+    _expect(results, "ops.callsTwo", statement_count=2, calls=2)
 
 
 def test_calls_three(results):
-    fn = results["ops.callsThree"]
-    assert fn["calls"] == 3
+    _expect(results, "ops.callsThree", statement_count=3, calls=3)
+
+
+# ---------------------------------------------------------------------------
+# ops.go — struct method, boilerplate
+# ---------------------------------------------------------------------------
 
 
 def test_method_dotted_path(results):
-    # Go method on struct — keyed with just function name since Go has no class hierarchy in file
-    assert "ops.method" in results
-    fn = results["ops.method"]
-    assert fn["math_ops"] == 1
+    _expect(results, "ops.method", statement_count=1, math_ops=1)
+
+
+def test_boilerplate(results):
+    _expect(results, "ops.boilerplate", statement_count=4)
 
 
 def test_min_statements_filtering():
-    results = analyze_codebase(TESTDATA, "go", min_statements=2)
-    for fn in results.values():
+    filtered = analyze_codebase(TESTDATA, "go", min_statements=2)
+    for fn in filtered.values():
         assert fn["statement_count"] >= 2

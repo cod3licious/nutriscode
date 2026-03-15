@@ -68,3 +68,10 @@ class MyClass {
         return x * 2;
     }
 }
+
+function boilerplate(data) {
+    const x = data;
+    const y = x;
+    const z = y;
+    return z;
+}

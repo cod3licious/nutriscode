@@ -60,3 +60,12 @@ public class Ops {
         }
     }
 }
+
+class Boilerplate {
+    public int boilerplate(int data) {
+        int x = data;
+        int y = x;
+        int z = y;
+        return z;
+    }
+}

@@ -1,25 +1,12 @@
 import argparse
 import json
 import sys
-from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 from tree_sitter import Language, Node, Parser
 
-# ---------------------------------------------------------------------------
-# Coefficients (all configurable)
-# ---------------------------------------------------------------------------
-
-COEF_MATH = 1.0
-COEF_BITWISE = 0.8
-COEF_CONDITIONAL = 0.4
-COEF_LOGICAL = 0.6
-COEF_COMPARISON = 0.5
-COEF_CALL = 0.3  # single unified call coefficient (no internal/external split)
-COEF_ASSERT = 0.2
-COEF_EXCEPTION = 0.1
-
+from languages import LANGUAGE_CONFIGS, LanguageConfig, register_languages
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -38,330 +25,9 @@ class FunctionMetrics:
     comparisons: int
     calls: int
     exception_handlers: int
-    score: float
 
     def to_dict(self) -> dict:
-        return asdict(self)
-
-
-# ---------------------------------------------------------------------------
-# Language configuration
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class LanguageConfig:
-    """Maps tree-sitter node types to metric categories for one language."""
-
-    # Node types that define a function/method (we score each separately)
-    function_node_types: frozenset[str]
-
-    # Node type used to get the function name (field or child type)
-    function_name_field: str  # field name on the function node, e.g. "name"
-
-    # Node types for classes (to build dotted paths)
-    class_node_types: frozenset[str]
-    class_name_field: str
-
-    # Node types counted as statements (denominator)
-    statement_node_types: frozenset[str]
-
-    # Node types that are unconditionally one category
-    conditional_node_types: frozenset[str]
-    logical_node_types: frozenset[str]
-    assertion_node_types: frozenset[str]
-    exception_node_types: frozenset[str]
-    call_node_types: frozenset[str]
-
-    # Binary/unary operator nodes where we must inspect the operator text
-    # to distinguish math vs bitwise vs comparison
-    operator_node_types: frozenset[str]
-
-    math_operators: frozenset[str]
-    bitwise_operators: frozenset[str]
-    comparison_operators: frozenset[str]
-
-    # Field name on operator nodes that holds the operator token (None = first unnamed child)
-    operator_field: str | None = "operator"
-
-
-MATH_OPS = frozenset(["+", "-", "*", "/", "//", "**", "%", "@", "+=", "-=", "*=", "/=", "//=", "**=", "%="])
-BITWISE_OPS = frozenset(["|", "&", "^", "~", "<<", ">>", "|=", "&=", "^=", "<<=", ">>="])
-COMPARISON_OPS = frozenset(["==", "!=", "<", ">", "<=", ">=", "is", "is not", "in", "not in"])
-
-
-def _make_python_config() -> LanguageConfig:
-    return LanguageConfig(
-        function_node_types=frozenset(["function_definition", "lambda"]),
-        function_name_field="name",
-        class_node_types=frozenset(["class_definition"]),
-        class_name_field="name",
-        statement_node_types=frozenset(
-            [
-                "expression_statement",
-                "assignment",
-                "augmented_assignment",
-                "annotated_assignment",
-                "return_statement",
-                "delete_statement",
-                "pass_statement",
-                "break_statement",
-                "continue_statement",
-                "raise_statement",
-                "yield",
-                "global_statement",
-                "nonlocal_statement",
-                "import_statement",
-                "import_from_statement",
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "try_statement",
-                "with_statement",
-                "match_statement",
-            ]
-        ),
-        conditional_node_types=frozenset(
-            [
-                "if_statement",
-                "elif_clause",
-                "conditional_expression",
-                "for_statement",
-                "while_statement",
-                "match_statement",
-                "case_clause",
-            ]
-        ),
-        logical_node_types=frozenset(["boolean_operator", "not_operator"]),
-        assertion_node_types=frozenset(["assert_statement"]),
-        exception_node_types=frozenset(["except_clause", "finally_clause"]),
-        call_node_types=frozenset(["call"]),
-        operator_node_types=frozenset(["binary_operator", "unary_operator", "augmented_assignment"]),
-        math_operators=MATH_OPS,
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS,
-        operator_field="operator",
-    )
-
-
-def _make_javascript_config() -> LanguageConfig:
-    return LanguageConfig(
-        function_node_types=frozenset(
-            [
-                "function_declaration",
-                "function",
-                "method_definition",
-                "arrow_function",
-                "generator_function",
-                "generator_function_declaration",
-            ]
-        ),
-        function_name_field="name",
-        class_node_types=frozenset(["class_declaration", "class"]),
-        class_name_field="name",
-        statement_node_types=frozenset(
-            [
-                "expression_statement",
-                "variable_declaration",
-                "lexical_declaration",
-                "return_statement",
-                "throw_statement",
-                "break_statement",
-                "continue_statement",
-                "if_statement",
-                "for_statement",
-                "for_in_statement",
-                "while_statement",
-                "do_statement",
-                "try_statement",
-                "switch_statement",
-                "import_statement",
-                "export_statement",
-            ]
-        ),
-        conditional_node_types=frozenset(
-            [
-                "if_statement",
-                "else_clause",
-                "ternary_expression",
-                "for_statement",
-                "for_in_statement",
-                "while_statement",
-                "do_statement",
-                "switch_case",
-                "switch_default",
-            ]
-        ),
-        logical_node_types=frozenset(["binary_expression"]),  # handled via operator text below
-        assertion_node_types=frozenset(),
-        exception_node_types=frozenset(["catch_clause", "finally_clause"]),
-        call_node_types=frozenset(["call_expression", "new_expression"]),
-        operator_node_types=frozenset(["binary_expression", "unary_expression", "assignment_expression"]),
-        math_operators=MATH_OPS | frozenset(["++", "--"]),
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS | frozenset(["===", "!=="]),
-        operator_field="operator",
-    )
-
-
-def _make_typescript_config() -> LanguageConfig:
-    cfg = _make_javascript_config()
-    return LanguageConfig(
-        **{
-            **asdict(cfg),
-            "function_node_types": cfg.function_node_types
-            | frozenset(
-                [
-                    "function_signature",
-                    "method_signature",
-                    "abstract_method_signature",
-                ]
-            ),
-            "class_node_types": cfg.class_node_types | frozenset(["abstract_class_declaration"]),
-            "assertion_node_types": frozenset(["call_expression"]),  # TS uses assert() calls
-        }
-    )
-
-
-def _make_java_config() -> LanguageConfig:
-    return LanguageConfig(
-        function_node_types=frozenset(
-            [
-                "method_declaration",
-                "constructor_declaration",
-                "lambda_expression",
-            ]
-        ),
-        function_name_field="name",
-        class_node_types=frozenset(
-            [
-                "class_declaration",
-                "interface_declaration",
-                "enum_declaration",
-                "record_declaration",
-            ]
-        ),
-        class_name_field="name",
-        statement_node_types=frozenset(
-            [
-                "expression_statement",
-                "local_variable_declaration",
-                "return_statement",
-                "throw_statement",
-                "break_statement",
-                "continue_statement",
-                "if_statement",
-                "for_statement",
-                "enhanced_for_statement",
-                "while_statement",
-                "do_statement",
-                "try_statement",
-                "switch_expression",
-                "assert_statement",
-            ]
-        ),
-        conditional_node_types=frozenset(
-            [
-                "if_statement",
-                "else",
-                "ternary_expression",
-                "for_statement",
-                "enhanced_for_statement",
-                "while_statement",
-                "do_statement",
-                "switch_expression",
-                "switch_label",
-            ]
-        ),
-        logical_node_types=frozenset(),  # handled via operator text
-        assertion_node_types=frozenset(["assert_statement"]),
-        exception_node_types=frozenset(["catch_clause", "finally_clause"]),
-        call_node_types=frozenset(["method_invocation", "object_creation_expression"]),
-        operator_node_types=frozenset(["binary_expression", "unary_expression", "assignment_expression", "update_expression"]),
-        math_operators=MATH_OPS | frozenset(["++", "--"]),
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS | frozenset(["instanceof"]),
-        operator_field="operator",
-    )
-
-
-def _make_go_config() -> LanguageConfig:
-    return LanguageConfig(
-        function_node_types=frozenset(["function_declaration", "method_declaration", "func_literal"]),
-        function_name_field="name",
-        class_node_types=frozenset(["type_declaration"]),  # Go has no classes but structs
-        class_name_field="name",
-        statement_node_types=frozenset(
-            [
-                "expression_statement",
-                "assignment_statement",
-                "short_var_declaration",
-                "var_declaration",
-                "return_statement",
-                "go_statement",
-                "defer_statement",
-                "send_statement",
-                "inc_statement",
-                "dec_statement",
-                "if_statement",
-                "for_statement",
-                "range_clause",
-                "type_switch_statement",
-                "select_statement",
-                "break_statement",
-                "continue_statement",
-            ]
-        ),
-        conditional_node_types=frozenset(
-            [
-                "if_statement",
-                "else",
-                "for_statement",
-                "type_switch_statement",
-                "expression_switch_statement",
-                "default_case",
-                "expression_case",
-                "select_statement",
-                "communication_case",
-            ]
-        ),
-        logical_node_types=frozenset(),  # handled via operator text
-        assertion_node_types=frozenset(),
-        exception_node_types=frozenset(),  # Go has no exceptions
-        call_node_types=frozenset(["call_expression"]),
-        operator_node_types=frozenset(["binary_expression", "unary_expression"]),
-        math_operators=MATH_OPS,
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS,
-        operator_field="operator",
-    )
-
-
-LANGUAGE_CONFIGS: dict[str, tuple[Callable, LanguageConfig]] = {}
-
-
-def _register_languages() -> None:
-    """Lazily import language modules and register configs."""
-    entries = [
-        ("py", "tree_sitter_python", _make_python_config),
-        ("js", "tree_sitter_javascript", _make_javascript_config),
-        ("ts", "tree_sitter_typescript", _make_typescript_config),
-        ("tsx", "tree_sitter_typescript", _make_typescript_config),
-        ("jsx", "tree_sitter_javascript", _make_javascript_config),
-        ("java", "tree_sitter_java", _make_java_config),
-        ("go", "tree_sitter_go", _make_go_config),
-    ]
-    for ext, module_name, config_factory in entries:
-        try:
-            mod = __import__(module_name)
-            # TypeScript exposes language_typescript / language_tsx
-            if module_name == "tree_sitter_typescript":
-                lang_fn = mod.language_tsx if ext in ("tsx",) else mod.language_typescript
-            else:
-                lang_fn = mod.language
-            LANGUAGE_CONFIGS[ext] = (lang_fn, config_factory())
-        except ImportError:
-            pass  # silently skip unavailable languages
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name != "name"}
 
 
 # ---------------------------------------------------------------------------
@@ -461,20 +127,6 @@ def _count_node(node: Node, cfg: LanguageConfig, counter: _Counter, is_root_func
         _count_node(child, cfg, counter)
 
 
-def _score(c: _Counter) -> float:
-    numerator = (
-        COEF_MATH * c.math_ops
-        + COEF_BITWISE * c.bitwise_ops
-        + COEF_CONDITIONAL * c.conditionals
-        + COEF_LOGICAL * c.logical_ops
-        + COEF_COMPARISON * c.comparisons
-        + COEF_CALL * max(0, c.calls - 1)
-        + COEF_ASSERT * c.assertions
-        + COEF_EXCEPTION * c.exception_handlers
-    )
-    return round(numerator / max(c.statement_count, 1), 4)
-
-
 # ---------------------------------------------------------------------------
 # Path construction
 # ---------------------------------------------------------------------------
@@ -548,7 +200,6 @@ def _extract_functions(
                     comparisons=counter.comparisons,
                     calls=counter.calls,
                     exception_handlers=counter.exception_handlers,
-                    score=_score(counter),
                 )
             )
             # Still descend to find nested named functions, but don't re-enter this one
@@ -577,7 +228,7 @@ def analyse_file(path: Path, root: Path, cfg: LanguageConfig, parser: Parser) ->
     return _extract_functions(tree.root_node, cfg, root, path, [])
 
 
-def analyze_codebase(root: Path, extension: str) -> list[FunctionMetrics]:
+def analyze_codebase(root: Path, extension: str, min_statements: int = 0) -> dict[str, dict]:
     ext = extension.lstrip(".")
     if ext not in LANGUAGE_CONFIGS:
         available = ", ".join(sorted(LANGUAGE_CONFIGS))
@@ -591,8 +242,29 @@ def analyze_codebase(root: Path, extension: str) -> list[FunctionMetrics]:
     for file in sorted(root.rglob(f"*.{ext}")):
         all_metrics.extend(analyse_file(file, root, cfg, parser))
 
-    all_metrics.sort(key=lambda m: m.score)
-    return all_metrics
+    filtered = [m for m in all_metrics if m.statement_count >= min_statements]
+    return {m.name: m.to_dict() for m in sorted(filtered, key=lambda m: m.name)}
+
+
+def _summarize(functions: dict[str, dict]) -> dict:
+    """Aggregate function metrics into a repository-level summary."""
+    total: dict[str, int] = {
+        "function_count": len(functions),
+        "statement_count": 0,
+        "math_ops": 0,
+        "bitwise_ops": 0,
+        "conditionals": 0,
+        "assertions": 0,
+        "logical_ops": 0,
+        "comparisons": 0,
+        "calls": 0,
+        "exception_handlers": 0,
+    }
+    for metrics in functions.values():
+        for key in total:
+            if key != "function_count":
+                total[key] += metrics.get(key, 0)
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -601,12 +273,11 @@ def analyze_codebase(root: Path, extension: str) -> list[FunctionMetrics]:
 
 
 def main() -> None:
-    _register_languages()
+    register_languages()
 
     ap = argparse.ArgumentParser(description="Score functions by computational density.")
     ap.add_argument("path", help="Root directory of the codebase")
     ap.add_argument("extension", help="File extension to analyse (e.g. py, ts, java)")
-    ap.add_argument("--output", "-o", help="Write JSON output to this file (default: stdout)")
     ap.add_argument(
         "--min-statements", type=int, default=0, help="Exclude functions with fewer statements than this (default: 0)"
     )
@@ -617,16 +288,23 @@ def main() -> None:
         print(f"Error: {root} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    metrics = analyze_codebase(root, args.extension)
-    metrics = [m for m in metrics if m.statement_count >= args.min_statements]
+    functions = analyze_codebase(root, args.extension, args.min_statements)
 
-    output = json.dumps([m.to_dict() for m in metrics], indent=2)
+    # Save per-repo results
+    results_dir = Path(__file__).parent.parent / "results"
+    results_dir.mkdir(exist_ok=True)
 
-    if args.output:
-        Path(args.output).write_text(output)
-        print(f"Wrote {len(metrics)} function scores to {args.output}")
-    else:
-        print(output)
+    repo_name = root.name
+    repo_file = results_dir / f"{repo_name}.json"
+    repo_file.write_text(json.dumps(functions, indent=2))
+    print(f"Wrote {len(functions)} functions to {repo_file}")
+
+    # Update _all.json with summary for this repo
+    all_file = results_dir / "_all.json"
+    all_data: dict = json.loads(all_file.read_text()) if all_file.exists() else {}
+    all_data[repo_name] = _summarize(functions)
+    all_file.write_text(json.dumps(all_data, indent=2))
+    print(f"Updated {all_file}")
 
 
 if __name__ == "__main__":

@@ -69,6 +69,10 @@ def _count_node(node: Node, cfg: LanguageConfig, counter: _Counter, is_root_func
     """
     ntype = node.type
 
+    # Skip type annotation subtrees — operators there are type syntax, not computation
+    if ntype in cfg.type_annotation_node_types:
+        return
+
     # Stop at nested non-lambda functions — they get their own score entry
     if not is_root_function and ntype in cfg.function_node_types:
         is_lambda = ntype == "lambda" or "lambda" in ntype or "arrow" in ntype

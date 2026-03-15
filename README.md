@@ -31,7 +31,7 @@ The coefficients for the weighted sum are:
 | Element | Weight | Rationale |
 |---------|--------|-----------|
 | Math operations (`+`, `-`, `*`, `/`, `**`, `%`, etc.) | 1.0 | Unambiguous computation |
-| Bitwise operations (`&`, `\|`, `^`, `~`, `<<`, `>>`) | 0.8 | Slightly reduced because `\|` is also used for type unions in Python/TypeScript |
+| Bitwise operations (`&`, `\|`, `^`, `~`, `<<`, `>>`) | 0.9 | Other fancy computations |
 | Conditionals & pattern matches (`if`, `else`, `switch`, `match`) | 0.4 | Encode branching decisions |
 | Logical operators (`and`, `or`, `not`, `&&`, `\|\|`) | 0.6 | Boolean logic, indicates more complicated decisions |
 | Comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`) | 0.5 | Encode decisions in expression form |

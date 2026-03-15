@@ -37,6 +37,11 @@ class LanguageConfig:
     # Field name on operator nodes that holds the operator token (None = first unnamed child)
     operator_field: str | None = "operator"
 
+    # Node types that represent type annotations — operators inside are syntax, not computation.
+    # Python wraps all type annotations in a `type` node; other languages use distinct AST nodes
+    # (e.g. TypeScript's `union_type`) that never produce operator nodes in the first place.
+    type_annotation_node_types: frozenset[str] = frozenset()
+
 
 # JS/TS files co-exist in the same codebase, so treat them as one family.
 # Passing any of these extensions will scan all four.
@@ -101,6 +106,7 @@ def _make_python_config() -> LanguageConfig:
         bitwise_operators=_BITWISE_OPS,
         comparison_operators=_COMPARISON_OPS,
         operator_field="operator",
+        type_annotation_node_types=frozenset(["type"]),
     )
 
 

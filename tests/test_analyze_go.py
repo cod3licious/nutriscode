@@ -1,27 +1,11 @@
 from pathlib import Path
 
 import pytest
+from helpers import expected_counts as _expect
 
 from analyze_repo import analyze_codebase
 
 TESTDATA = Path(__file__).parent / "testdata" / "go"
-
-ZEROS = {
-    "statement_count": 0,
-    "math_ops": 0,
-    "bitwise_ops": 0,
-    "conditionals": 0,
-    "logical_ops": 0,
-    "comparisons": 0,
-    "calls": 0,
-    "assertions": 0,
-    "exception_handlers": 0,
-}
-
-
-def _expect(results, name, **overrides):
-    """Assert all metrics match. Unspecified fields default to 0."""
-    assert results[name] == {**ZEROS, **overrides}
 
 
 @pytest.fixture(scope="module")

@@ -91,3 +91,4 @@ section-order = ["future", "standard-library", "third-party", "first-party", "te
 minversion = "6.0"
 addopts = "--disable-warnings"
 markers = ["slow"]
+pythonpath = ["src", "tests"]

@@ -139,8 +139,7 @@ python -m http.server 8000 --directory src
 | Extension | Language | Parser package |
 |-----------|----------|---------------|
 | `py` | Python | `tree-sitter-python` |
-| `js` / `jsx` | JavaScript | `tree-sitter-javascript` |
-| `ts` / `tsx` | TypeScript | `tree-sitter-typescript` |
+| `js` / `ts` | JavaScript and TypeScript (incl. `.jsx` and `.tsx` files) | `tree-sitter-javascript` & `tree-sitter-typescript` |
 | `java` | Java | `tree-sitter-java` |
 | `go` | Go | `tree-sitter-go` |
 

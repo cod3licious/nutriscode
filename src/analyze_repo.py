@@ -6,7 +6,7 @@ from pathlib import Path
 
 from tree_sitter import Language, Node, Parser
 
-from languages import LANGUAGE_CONFIGS, LanguageConfig, register_languages
+from languages import JS_TS_FAMILY, LANGUAGE_CONFIGS, LanguageConfig, register_languages
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -234,13 +234,17 @@ def analyze_codebase(root: Path, extension: str, min_statements: int = 0) -> dic
         available = ", ".join(sorted(LANGUAGE_CONFIGS))
         raise ValueError(f"Unsupported extension '{ext}'. Available: {available}")
 
-    lang_fn, cfg = LANGUAGE_CONFIGS[ext]
-    language = Language(lang_fn())
-    parser = Parser(language)
+    # JS/TS files coexist in the same codebase — always scan the full family together.
+    extensions = JS_TS_FAMILY if ext in JS_TS_FAMILY else [ext]
 
     all_metrics: list[FunctionMetrics] = []
-    for file in sorted(root.rglob(f"*.{ext}")):
-        all_metrics.extend(analyse_file(file, root, cfg, parser))
+    for e in extensions:
+        if e not in LANGUAGE_CONFIGS:
+            continue
+        lang_fn, cfg = LANGUAGE_CONFIGS[e]
+        parser = Parser(Language(lang_fn()))
+        for file in sorted(root.rglob(f"*.{e}")):
+            all_metrics.extend(analyse_file(file, root, cfg, parser))
 
     filtered = [m for m in all_metrics if m.statement_count >= min_statements]
     return {m.name: m.to_dict() for m in sorted(filtered, key=lambda m: m.name)}

@@ -38,9 +38,16 @@ class LanguageConfig:
     operator_field: str | None = "operator"
 
 
-MATH_OPS = frozenset(["+", "-", "*", "/", "//", "**", "%", "@", "+=", "-=", "*=", "/=", "//=", "**=", "%="])
-BITWISE_OPS = frozenset(["|", "&", "^", "~", "<<", ">>", "|=", "&=", "^=", "<<=", ">>="])
-COMPARISON_OPS = frozenset(["==", "!=", "<", ">", "<=", ">=", "is", "is not", "in", "not in"])
+# JS/TS files co-exist in the same codebase, so treat them as one family.
+# Passing any of these extensions will scan all four.
+JS_TS_FAMILY: frozenset[str] = frozenset(["js", "jsx", "ts", "tsx"])
+
+# Populated at runtime by register_languages()
+LANGUAGE_CONFIGS: dict[str, tuple[Callable, LanguageConfig]] = {}
+
+_MATH_OPS = frozenset(["+", "-", "*", "/", "//", "**", "%", "@", "+=", "-=", "*=", "/=", "//=", "**=", "%="])
+_BITWISE_OPS = frozenset(["|", "&", "^", "~", "<<", ">>", "|=", "&=", "^=", "<<=", ">>="])
+_COMPARISON_OPS = frozenset(["==", "!=", "<", ">", "<=", ">=", "is", "is not", "in", "not in"])
 
 
 def _make_python_config() -> LanguageConfig:
@@ -90,9 +97,9 @@ def _make_python_config() -> LanguageConfig:
         exception_node_types=frozenset(["except_clause", "finally_clause"]),
         call_node_types=frozenset(["call"]),
         operator_node_types=frozenset(["binary_operator", "unary_operator", "augmented_assignment"]),
-        math_operators=MATH_OPS,
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS,
+        math_operators=_MATH_OPS,
+        bitwise_operators=_BITWISE_OPS,
+        comparison_operators=_COMPARISON_OPS,
         operator_field="operator",
     )
 
@@ -150,9 +157,9 @@ def _make_javascript_config() -> LanguageConfig:
         exception_node_types=frozenset(["catch_clause", "finally_clause"]),
         call_node_types=frozenset(["call_expression", "new_expression"]),
         operator_node_types=frozenset(["binary_expression", "unary_expression", "assignment_expression"]),
-        math_operators=MATH_OPS | frozenset(["++", "--"]),
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS | frozenset(["===", "!=="]),
+        math_operators=_MATH_OPS | frozenset(["++", "--"]),
+        bitwise_operators=_BITWISE_OPS,
+        comparison_operators=_COMPARISON_OPS | frozenset(["===", "!=="]),
         operator_field="operator",
     )
 
@@ -234,9 +241,9 @@ def _make_java_config() -> LanguageConfig:
         exception_node_types=frozenset(["catch_clause", "finally_clause"]),
         call_node_types=frozenset(["method_invocation", "object_creation_expression"]),
         operator_node_types=frozenset(["binary_expression", "unary_expression", "assignment_expression", "update_expression"]),
-        math_operators=MATH_OPS | frozenset(["++", "--"]),
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS | frozenset(["instanceof"]),
+        math_operators=_MATH_OPS | frozenset(["++", "--"]),
+        bitwise_operators=_BITWISE_OPS,
+        comparison_operators=_COMPARISON_OPS | frozenset(["instanceof"]),
         operator_field="operator",
     )
 
@@ -286,15 +293,11 @@ def _make_go_config() -> LanguageConfig:
         exception_node_types=frozenset(),  # Go has no exceptions
         call_node_types=frozenset(["call_expression"]),
         operator_node_types=frozenset(["binary_expression", "unary_expression"]),
-        math_operators=MATH_OPS,
-        bitwise_operators=BITWISE_OPS,
-        comparison_operators=COMPARISON_OPS,
+        math_operators=_MATH_OPS,
+        bitwise_operators=_BITWISE_OPS,
+        comparison_operators=_COMPARISON_OPS,
         operator_field="operator",
     )
-
-
-# Populated at runtime by register_languages()
-LANGUAGE_CONFIGS: dict[str, tuple[Callable, LanguageConfig]] = {}
 
 
 def register_languages() -> None:

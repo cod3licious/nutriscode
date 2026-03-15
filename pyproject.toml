@@ -42,6 +42,7 @@ exclude = [
     "build",
     "dist",
     "*.ipynb",
+    "tests/testdata",
 ]
 
 [tool.ruff.lint]

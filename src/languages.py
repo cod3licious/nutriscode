@@ -101,7 +101,7 @@ def _make_python_config() -> LanguageConfig:
         assertion_node_types=frozenset(["assert_statement"]),
         exception_node_types=frozenset(["except_clause", "finally_clause"]),
         call_node_types=frozenset(["call"]),
-        operator_node_types=frozenset(["binary_operator", "unary_operator", "augmented_assignment"]),
+        operator_node_types=frozenset(["binary_operator", "unary_operator", "augmented_assignment", "comparison_operator"]),
         math_operators=_MATH_OPS,
         bitwise_operators=_BITWISE_OPS,
         comparison_operators=_COMPARISON_OPS,

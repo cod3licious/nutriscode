@@ -66,8 +66,8 @@ repos:
 
       - id: ty
         name: ty
-        entry: uv run -- ty check
+        entry: uv run -- ty check src/
         language: system
         stages: [pre-commit, pre-push, manual]
-        types_or: [python, pyi]
+        pass_filenames: false
         require_serial: true

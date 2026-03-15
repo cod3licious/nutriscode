@@ -233,6 +233,8 @@ def analyse_file(path: Path, root: Path, cfg: LanguageConfig, parser: Parser) ->
 
 
 def analyze_codebase(root: Path, extension: str, min_statements: int = 0) -> dict[str, dict]:
+    if not LANGUAGE_CONFIGS:
+        register_languages()
     ext = extension.lstrip(".")
     if ext not in LANGUAGE_CONFIGS:
         available = ", ".join(sorted(LANGUAGE_CONFIGS))
@@ -281,8 +283,6 @@ def _summarize(functions: dict[str, dict]) -> dict:
 
 
 def main() -> None:
-    register_languages()
-
     ap = argparse.ArgumentParser(description="Score functions by computational density.")
     ap.add_argument("path", help="Root directory of the codebase")
     ap.add_argument("extension", help="File extension to analyse (e.g. py, ts, java)")

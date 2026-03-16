@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NutrisCode</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --surface: #fff;
+    --border: #e0e0e0;
+    --text: #1a1a1a;
+    --text-muted: #666;
+    --accent: #4a7cff;
+    --dot: rgba(74, 124, 255, 0.55);
+    --dot-hover: #ff6b35;
+    --radius: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 32px;
+    line-height: 1.5;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  /* Controls bar */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .control-group { display: flex; flex-direction: column; gap: 3px; }
+  .control-group label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  select, input[type="number"] {
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+  }
+  select:focus, input[type="number"]:focus { border-color: var(--accent); }
+  select { min-width: 180px; }
+  input[type="number"] { width: 72px; text-align: center; }
+
+  .coeff-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: end;
+  }
+
+  /* Chart */
+  .chart-container {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px;
+  }
+
+  canvas { display: block; width: 100%; }
+
+  /* Tooltip */
+  .tooltip {
+    display: none;
+    position: absolute;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    font-size: 0.78rem;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    line-height: 1.45;
+    max-width: 360px;
+    white-space: pre-line;
+    z-index: 10;
+  }
+
+  .status {
+    text-align: center;
+    padding: 48px;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>NutrisCode</h1>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Dataset</label>
+    <select id="file-select"><option value="">Loading…</option></select>
+  </div>
+
+  <div class="coeff-grid" id="coeff-grid"></div>
+</div>
+
+<div class="chart-container">
+  <canvas id="chart"></canvas>
+  <div class="tooltip" id="tooltip"></div>
+</div>
+
+<script>
+const RESULTS_DIR = "results";
+
+const COEFFICIENTS = [
+  { key: "math_ops",           label: "Math",       default: 1.0 },
+  { key: "bitwise_ops",        label: "Bitwise",    default: 0.9 },
+  { key: "logical_ops",        label: "Logical",    default: 0.6 },
+  { key: "comparisons",        label: "Compare",    default: 0.5 },
+  { key: "conditionals",       label: "Cond",       default: 0.4 },
+  { key: "calls",              label: "Calls",      default: 0.3 },
+  { key: "assertions",         label: "Assert",     default: 0.2 },
+  { key: "exception_handlers", label: "Except",     default: 0.1 },
+];
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+let rawData = null;   // { name: string, metrics: {...} }[]
+let points = null;    // { name, x, y, metrics }[] — recomputed on coeff change
+const coeffs = {};    // key -> current value
+const PADDING = { top: 20, right: 20, bottom: 44, left: 56 };
+const DOT_RADIUS = 3;
+let hoveredIdx = -1;
+
+// ---------------------------------------------------------------------------
+// Coefficient controls
+// ---------------------------------------------------------------------------
+
+const coeffGrid = document.getElementById("coeff-grid");
+for (const c of COEFFICIENTS) {
+  coeffs[c.key] = c.default;
+  const group = document.createElement("div");
+  group.className = "control-group";
+  group.innerHTML = `<label>${c.label}</label>
+    <input type="number" id="coeff-${c.key}" value="${c.default}" min="0" max="1" step="0.1">`;
+  coeffGrid.appendChild(group);
+  group.querySelector("input").addEventListener("input", (e) => {
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v) && v >= 0 && v <= 1) {
+      coeffs[c.key] = v;
+      recompute();
+      draw();
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Weighted sum computation
+// ---------------------------------------------------------------------------
+
+function weightedSum(m) {
+  let sum = 0;
+  for (const c of COEFFICIENTS) {
+    const count = m[c.key] || 0;
+    // "First call is free" — only count calls beyond the first
+    sum += coeffs[c.key] * (c.key === "calls" ? Math.max(0, count - 1) : count);
+  }
+  return sum;
+}
+
+function recompute() {
+  if (!rawData) return;
+  points = rawData.map((d) => ({
+    name: d.name,
+    x: d.metrics.statement_count,
+    y: weightedSum(d.metrics),
+    metrics: d.metrics,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Data loading
+// ---------------------------------------------------------------------------
+
+const fileSelect = document.getElementById("file-select");
+
+async function loadIndex() {
+  try {
+    const resp = await fetch(`${RESULTS_DIR}/_index.json`);
+    if (!resp.ok) throw new Error();
+    const files = await resp.json();
+    fileSelect.innerHTML = files.map((f) =>
+      `<option value="${f}">${f.replace(/\.json$/, "")}</option>`
+    ).join("");
+    if (files.length > 0) loadFile(files[0]);
+  } catch {
+    fileSelect.innerHTML = '<option value="">No results found — run analyze_repo.py first</option>';
+  }
+}
+
+fileSelect.addEventListener("change", () => {
+  if (fileSelect.value) loadFile(fileSelect.value);
+});
+
+async function loadFile(filename) {
+  try {
+    const resp = await fetch(`${RESULTS_DIR}/${filename}`);
+    const data = await resp.json();
+    rawData = Object.entries(data).map(([name, metrics]) => ({ name, metrics }));
+    recompute();
+    draw();
+  } catch {
+    rawData = null;
+    points = null;
+    draw();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Canvas drawing
+// ---------------------------------------------------------------------------
+
+const canvas = document.getElementById("chart");
+const ctx = canvas.getContext("2d");
+const tooltipEl = document.getElementById("tooltip");
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width - 16;  // account for container padding
+  const h = Math.max(400, Math.min(w * 0.55, 640));
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { w, h };
+}
+
+function draw() {
+  const { w, h } = resize();
+  ctx.clearRect(0, 0, w, h);
+
+  if (!points || points.length === 0) {
+    ctx.fillStyle = "#999";
+    ctx.font = "14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No data loaded", w / 2, h / 2);
+    return;
+  }
+
+  const plotW = w - PADDING.left - PADDING.right;
+  const plotH = h - PADDING.top - PADDING.bottom;
+
+  // Axis ranges
+  let maxX = 0, maxY = 0;
+  for (const p of points) {
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  // Add 10% headroom, minimum 1
+  maxX = Math.max(1, Math.ceil(maxX * 1.1));
+  maxY = Math.max(1, Math.ceil(maxY * 1.1));
+
+  function toCanvasX(v) { return PADDING.left + (v / maxX) * plotW; }
+  function toCanvasY(v) { return PADDING.top + plotH - (v / maxY) * plotH; }
+
+  // Grid lines and labels
+  ctx.strokeStyle = "#eee";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#999";
+  ctx.font = "11px sans-serif";
+
+  const xTicks = niceTickCount(maxX);
+  const yTicks = niceTickCount(maxY);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let i = 0; i <= xTicks; i++) {
+    const v = Math.round((maxX / xTicks) * i);
+    const cx = toCanvasX(v);
+    ctx.beginPath(); ctx.moveTo(cx, PADDING.top); ctx.lineTo(cx, PADDING.top + plotH); ctx.stroke();
+    ctx.fillText(v, cx, PADDING.top + plotH + 6);
+  }
+
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= yTicks; i++) {
+    const v = +((maxY / yTicks) * i).toFixed(1);
+    const cy = toCanvasY(v);
+    ctx.beginPath(); ctx.moveTo(PADDING.left, cy); ctx.lineTo(PADDING.left + plotW, cy); ctx.stroke();
+    ctx.fillText(v, PADDING.left - 8, cy);
+  }
+
+  // Axis labels
+  ctx.fillStyle = "#666";
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("Statements", PADDING.left + plotW / 2, h - 10);
+
+  ctx.save();
+  ctx.translate(14, PADDING.top + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textBaseline = "bottom";
+  ctx.fillText("Weighted Sum", 0, 0);
+  ctx.restore();
+
+  // Score = 0.5 diagonal line: y = 0.5 * x
+  ctx.save();
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = "#ccc";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const lineEndX = Math.min(maxX, maxY / 0.5);
+  ctx.moveTo(toCanvasX(0), toCanvasY(0));
+  ctx.lineTo(toCanvasX(lineEndX), toCanvasY(0.5 * lineEndX));
+  ctx.stroke();
+  // Label
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#bbb";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "bottom";
+  const lblX = Math.min(lineEndX * 0.85, maxX * 0.9);
+  ctx.fillText("score = 0.5", toCanvasX(lblX) + 4, toCanvasY(0.5 * lblX) - 4);
+  ctx.restore();
+
+  // Plot border
+  ctx.strokeStyle = "#ddd";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.strokeRect(PADDING.left, PADDING.top, plotW, plotH);
+
+  // Dots
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const cx = toCanvasX(p.x);
+    const cy = toCanvasY(p.y);
+    // Clip to plot area
+    if (cx < PADDING.left || cx > PADDING.left + plotW || cy < PADDING.top || cy > PADDING.top + plotH) continue;
+    ctx.beginPath();
+    ctx.arc(cx, cy, i === hoveredIdx ? DOT_RADIUS + 2 : DOT_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = i === hoveredIdx ? "var(--dot-hover)" : "var(--dot)";
+    ctx.fill();
+  }
+
+  // Store transform info for hit testing
+  canvas._plot = { maxX, maxY, plotW, plotH, toCanvasX, toCanvasY };
+}
+
+function niceTickCount(max) {
+  if (max <= 5) return max;
+  if (max <= 10) return 5;
+  if (max <= 20) return 5;
+  return 5;
+}
+
+// ---------------------------------------------------------------------------
+// Tooltip / hover
+// ---------------------------------------------------------------------------
+
+canvas.addEventListener("mousemove", (e) => {
+  if (!points || points.length === 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const plot = canvas._plot;
+  if (!plot) return;
+
+  // Find nearest point within threshold
+  let bestDist = 20 * 20; // 20px threshold squared
+  let bestIdx = -1;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const cx = plot.toCanvasX(p.x);
+    const cy = plot.toCanvasY(p.y);
+    const dx = mx - cx, dy = my - cy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestDist) { bestDist = d2; bestIdx = i; }
+  }
+
+  if (bestIdx !== hoveredIdx) {
+    hoveredIdx = bestIdx;
+    draw();
+  }
+
+  if (bestIdx >= 0) {
+    const p = points[bestIdx];
+    const m = p.metrics;
+    const score = p.x > 0 ? (p.y / p.x).toFixed(3) : "—";
+    const lines = [
+      p.name,
+      `Score: ${score}  |  Weighted sum: ${p.y.toFixed(2)}`,
+      `Statements: ${m.statement_count}  Math: ${m.math_ops}  Bitwise: ${m.bitwise_ops}`,
+      `Cond: ${m.conditionals}  Logical: ${m.logical_ops}  Compare: ${m.comparisons}`,
+      `Calls: ${m.calls}  Assert: ${m.assertions}  Except: ${m.exception_handlers}`,
+    ];
+    tooltipEl.textContent = lines.join("\n");
+    tooltipEl.style.display = "block";
+
+    // Position tooltip near cursor, but keep it inside the chart
+    const container = canvas.parentElement.getBoundingClientRect();
+    let tx = e.clientX - container.left + 14;
+    let ty = e.clientY - container.top - 10;
+    // Prevent overflow right
+    if (tx + 300 > container.width) tx = e.clientX - container.left - 300;
+    if (ty < 0) ty = 10;
+    tooltipEl.style.left = tx + "px";
+    tooltipEl.style.top = ty + "px";
+  } else {
+    tooltipEl.style.display = "none";
+  }
+});
+
+canvas.addEventListener("mouseleave", () => {
+  if (hoveredIdx >= 0) {
+    hoveredIdx = -1;
+    draw();
+  }
+  tooltipEl.style.display = "none";
+});
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+window.addEventListener("resize", draw);
+loadIndex();
+</script>
+</body>
+</html>

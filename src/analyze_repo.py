@@ -314,6 +314,10 @@ def main() -> None:
     all_file.write_text(json.dumps(all_data, indent=2))
     print(f"Updated {all_file}")
 
+    # Update _index.json so the frontend can discover available files
+    index = sorted(f.name for f in results_dir.glob("*.json") if not f.name.startswith("_"))
+    (results_dir / "_index.json").write_text(json.dumps(["_all.json", *index], indent=2))
+
 
 if __name__ == "__main__":
     main()

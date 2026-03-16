@@ -126,11 +126,11 @@ uv run pytest tests/
 
 ### Running the frontend
 
-Open `src/index.html` in a browser served by any static file server. You can select one of the jsons from the `results/` directory to render the scatter plot.
+Open `index.html` in a browser served by any static file server. You can select one of the jsons from the `results/` directory to render the scatter plot.
 
 ```bash
 # simple local server, no installation required
-python -m http.server 8000 --directory src
+python -m http.server 8000
 # then open http://localhost:8000
 ```
 

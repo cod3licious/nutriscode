@@ -32,7 +32,6 @@
     display: flex;
     flex: 1;
     min-height: 0;
-    gap: 0;
   }
 
   /* Sidebar */
@@ -101,11 +100,7 @@
   .coeff-row label {
     font-size: 0.8rem;
     color: var(--text);
-    flex: 1;
     cursor: default;
-    display: flex;
-    align-items: center;
-    gap: 6px;
   }
 
   input[type="number"] {
@@ -244,17 +239,36 @@ const COEFFICIENTS = [
   { key: "exception_handlers", label: "Exc. handlers",   default: 0.1 },
 ];
 
+const DESCRIPTION_FUNCTIONS = "Each dot is a function. The x-axis shows its statement count; the y-axis shows the weighted sum of its operations \u2014 a measure of computational richness. The dashed diagonal marks a score of\u00a00.5: functions above it pack more operations relative to their size.";
+const DESCRIPTION_ALL = "Each dot is a whole codebase, sized by function count. The axes show the summed statement count and weighted operations across all functions. The dashed diagonal marks a score of\u00a00.5: codebases above it are computationally denser on average.";
+
+const PADDING = { top: 24, right: 28, bottom: 46 };
+const AXIS_LABEL_W = 18;
+const DOT_RADIUS = 3.5;
+
+// ---------------------------------------------------------------------------
+// Cached DOM elements
+// ---------------------------------------------------------------------------
+
+const canvas = document.getElementById("chart");
+const ctx = canvas.getContext("2d");
+const tooltipEl = document.getElementById("tooltip");
+const fileSelect = document.getElementById("file-select");
+const chartWrap = document.getElementById("chart-wrap");
+const legendSection = document.getElementById("legend-section");
+const legendEl = document.getElementById("legend");
+const descriptionEl = document.getElementById("description");
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-let rawData = null;      // [{ name, metrics }]
-let points = null;       // [{ name, x, y, metrics, module, color }]
-let isAllView = false;   // true when _all.json is loaded (repo summaries)
+let rawData = null;       // [{ name, metrics }]
+let points = null;        // [{ name, x, y, metrics, module, color, colorFaded, radius }]
+let isAllView = false;
+let moduleColorMap = {};  // module -> { solid, faded }
+let plotState = null;     // { toCanvasX, toCanvasY } — set by draw(), used by hover
 const coeffs = {};
-const moduleColorMap = {};
-const PADDING = { top: 24, right: 28, bottom: 46, left: 58 };
-const DOT_RADIUS = 3.5;
 let hoveredIdx = -1;
 
 // ---------------------------------------------------------------------------
@@ -264,18 +278,15 @@ let hoveredIdx = -1;
 // ---------------------------------------------------------------------------
 
 function buildModuleColors(modules) {
-  // Start at a warm terracotta hue, step by golden angle for maximal separation
   const GOLDEN_ANGLE = 137.508;
-  const START_HUE = 18;  // warm orange/terracotta anchor
-  for (const k of Object.keys(moduleColorMap)) delete moduleColorMap[k];
+  const START_HUE = 18;
+  const map = {};
   modules.forEach((mod, i) => {
     const hue = (START_HUE + i * GOLDEN_ANGLE) % 360;
     const base = `${hue.toFixed(1)}, 40%, 62%`;
-    moduleColorMap[mod] = {
-      solid: `hsl(${base})`,
-      faded: `hsla(${base}, 0.55)`,
-    };
+    map[mod] = { solid: `hsl(${base})`, faded: `hsla(${base}, 0.55)` };
   });
+  moduleColorMap = map;
 }
 
 // ---------------------------------------------------------------------------
@@ -287,9 +298,10 @@ for (const c of COEFFICIENTS) {
   coeffs[c.key] = c.default;
   const row = document.createElement("div");
   row.className = "coeff-row";
+  const id = `coeff-${c.key}`;
   row.innerHTML = `
-    <label>${c.label}</label>
-    <input type="number" value="${c.default}" min="0" max="1" step="0.1">`;
+    <label for="${id}">${c.label}</label>
+    <input id="${id}" name="${id}" type="number" value="${c.default}" min="0" max="1" step="0.1">`;
   coeffList.appendChild(row);
   row.querySelector("input").addEventListener("input", (e) => {
     const v = parseFloat(e.target.value);
@@ -316,34 +328,32 @@ function weightedSum(m) {
 
 function recompute() {
   if (!rawData) return;
-  // Collect sorted unique modules first so colors are stable and evenly distributed
+
   const modules = [...new Set(rawData.map(d => d.name.split(".")[0]))].sort();
   buildModuleColors(modules);
 
   points = rawData.map((d) => {
     const mod = d.name.split(".")[0];
+    const colors = moduleColorMap[mod];
     return {
       name: d.name,
       x: d.metrics.statement_count,
       y: weightedSum(d.metrics),
       metrics: d.metrics,
       module: mod,
-      color: moduleColorMap[mod].solid,
-      colorFaded: moduleColorMap[mod].faded,
-      radius: DOT_RADIUS,  // overwritten below for _all view
+      color: colors.solid,
+      colorFaded: colors.faded,
+      radius: DOT_RADIUS,
     };
   });
 
-  // Scale dot size by function count in _all view
   if (isAllView) {
     const maxCount = Math.max(...points.map(p => p.metrics.function_count || 1));
     for (const p of points) {
-      const count = p.metrics.function_count || 1;
-      p.radius = 5 + 18 * Math.sqrt(count / maxCount);
+      p.radius = 5 + 18 * Math.sqrt((p.metrics.function_count || 1) / maxCount);
     }
   }
 
-  // Sort by module so same-color dots render together (avoids z-order confusion)
   points.sort((a, b) => a.module.localeCompare(b.module));
   updateLegend();
 }
@@ -353,15 +363,13 @@ function recompute() {
 // ---------------------------------------------------------------------------
 
 function updateLegend() {
-  const legendSection = document.getElementById("legend-section");
-  const legend = document.getElementById("legend");
   if (!points) { legendSection.style.display = "none"; return; }
 
   const modules = [...new Set(points.map(p => p.module))].sort();
   if (modules.length <= 1) { legendSection.style.display = "none"; return; }
 
   legendSection.style.display = "";
-  legend.innerHTML = modules.map(mod => {
+  legendEl.innerHTML = modules.map(mod => {
     const color = (moduleColorMap[mod] || {}).solid || "#ccc";
     return `<div class="legend-item">
       <div class="legend-dot" style="background:${color}"></div>
@@ -374,8 +382,6 @@ function updateLegend() {
 // Data loading
 // ---------------------------------------------------------------------------
 
-const fileSelect = document.getElementById("file-select");
-
 async function loadIndex() {
   try {
     const resp = await fetch(`${RESULTS_DIR}/_index.json`);
@@ -386,7 +392,7 @@ async function loadIndex() {
     ).join("");
     if (files.length > 0) loadFile(files[0]);
   } catch {
-    fileSelect.innerHTML = '<option value="">No results — run analyze_repo.py first</option>';
+    fileSelect.innerHTML = '<option value="">No results \u2014 run analyze_repo.py first</option>';
   }
 }
 
@@ -394,12 +400,9 @@ fileSelect.addEventListener("change", () => {
   if (fileSelect.value) loadFile(fileSelect.value);
 });
 
-const DESCRIPTION_FUNCTIONS = "Each dot is a function. The x-axis shows its statement count; the y-axis shows the weighted sum of its operations — a measure of computational richness. The dashed diagonal marks a score of\u00a00.5: functions above it pack more operations relative to their size.";
-const DESCRIPTION_ALL = "Each dot is a whole codebase, sized by function count. The axes show the summed statement count and weighted operations across all functions. The dashed diagonal marks a score of\u00a00.5: codebases above it are computationally denser on average.";
-
 async function loadFile(filename) {
   isAllView = filename === "_all.json";
-  document.getElementById("description").textContent = isAllView ? DESCRIPTION_ALL : DESCRIPTION_FUNCTIONS;
+  descriptionEl.textContent = isAllView ? DESCRIPTION_ALL : DESCRIPTION_FUNCTIONS;
   try {
     const resp = await fetch(`${RESULTS_DIR}/${filename}`);
     const data = await resp.json();
@@ -418,13 +421,8 @@ async function loadFile(filename) {
 // Canvas drawing
 // ---------------------------------------------------------------------------
 
-const canvas = document.getElementById("chart");
-const ctx = canvas.getContext("2d");
-const tooltipEl = document.getElementById("tooltip");
-
 function resize() {
-  const wrap = document.getElementById("chart-wrap");
-  const rect = wrap.getBoundingClientRect();
+  const rect = chartWrap.getBoundingClientRect();
   const w = rect.width - 16;
   const h = rect.height - 16;
   const dpr = window.devicePixelRatio || 1;
@@ -437,7 +435,6 @@ function resize() {
 }
 
 function niceTicks(max) {
-  // Return a nice step size that gives ~5 ticks
   const rough = max / 5;
   const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
   const normalized = rough / magnitude;
@@ -458,6 +455,7 @@ function draw() {
     return;
   }
 
+  // Axis ranges
   let maxX = 0, maxY = 0;
   for (const p of points) {
     if (p.x > maxX) maxX = p.x;
@@ -466,28 +464,26 @@ function draw() {
   maxX = Math.max(1, maxX * 1.12);
   maxY = Math.max(1, maxY * 1.12);
 
-  // Grid + tick labels
   const xStep = niceTicks(maxX);
   const yStep = niceTicks(maxY);
 
-  // Measure widest y-tick to compute left padding dynamically
+  // Dynamic left padding based on widest y-tick label
   ctx.font = "11px sans-serif";
   let maxTickW = 0;
   for (let v = 0; v <= maxY + yStep * 0.01; v += yStep) {
     maxTickW = Math.max(maxTickW, ctx.measureText(+v.toFixed(1)).width);
   }
-  const AXIS_LABEL_W = 18; // space for rotated axis label
-  const leftPad = AXIS_LABEL_W + maxTickW + 12; // label + tick text + gap
+  const leftPad = AXIS_LABEL_W + maxTickW + 12;
 
-  const toCanvasX = (v) => leftPad + (v / maxX) * (w - leftPad - PADDING.right);
-  const toCanvasY = (v) => PADDING.top + (h - PADDING.top - PADDING.bottom) - (v / maxY) * (h - PADDING.top - PADDING.bottom);
   const plotW = w - leftPad - PADDING.right;
   const plotH = h - PADDING.top - PADDING.bottom;
+  const toCanvasX = (v) => leftPad + (v / maxX) * plotW;
+  const toCanvasY = (v) => PADDING.top + plotH - (v / maxY) * plotH;
 
+  // Grid + tick labels
   ctx.strokeStyle = "#efefef";
   ctx.lineWidth = 1;
   ctx.fillStyle = "#aaa";
-  ctx.font = "11px sans-serif";
 
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
@@ -538,70 +534,67 @@ function draw() {
   ctx.lineWidth = 1;
   ctx.strokeRect(leftPad, PADDING.top, plotW, plotH);
 
-  // Dots (non-hovered first, hovered last so it renders on top)
-  for (let pass = 0; pass < 2; pass++) {
-    for (let i = 0; i < points.length; i++) {
-      if (pass === 0 && i === hoveredIdx) continue;
-      if (pass === 1 && i !== hoveredIdx) continue;
-      const p = points[i];
-      const cx = toCanvasX(p.x);
-      const cy = toCanvasY(p.y);
-      if (cx < leftPad - 1 || cx > leftPad + plotW + 1 ||
-          cy < PADDING.top - 1 || cy > PADDING.top + plotH + 1) continue;
-
-      const isHovered = i === hoveredIdx;
-      const r = isHovered ? p.radius + 2.5 : p.radius;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = isHovered ? p.color : p.colorFaded;
-      ctx.fill();
-      if (isHovered) {
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
-    }
+  // Dots — draw all non-hovered, then hovered on top
+  for (let i = 0; i < points.length; i++) {
+    if (i === hoveredIdx) continue;
+    const p = points[i];
+    const cx = toCanvasX(p.x);
+    const cy = toCanvasY(p.y);
+    if (cx < leftPad - 1 || cx > leftPad + plotW + 1 ||
+        cy < PADDING.top - 1 || cy > PADDING.top + plotH + 1) continue;
+    ctx.beginPath();
+    ctx.arc(cx, cy, p.radius, 0, Math.PI * 2);
+    ctx.fillStyle = p.colorFaded;
+    ctx.fill();
+  }
+  if (hoveredIdx >= 0 && hoveredIdx < points.length) {
+    const p = points[hoveredIdx];
+    const cx = toCanvasX(p.x);
+    const cy = toCanvasY(p.y);
+    ctx.beginPath();
+    ctx.arc(cx, cy, p.radius + 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
 
   // Labels for _all view (repo names next to dots)
   if (isAllView) {
     ctx.font = "bold 11px sans-serif";
     ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
     for (const p of points) {
-      const cx = toCanvasX(p.x);
-      const cy = toCanvasY(p.y);
       ctx.fillStyle = p.color;
-      ctx.textAlign = "left";
-      ctx.fillText(p.name, cx + p.radius + 5, cy);
+      ctx.fillText(p.name, toCanvasX(p.x) + p.radius + 5, toCanvasY(p.y));
     }
   }
 
-  canvas._plot = { maxX, maxY, toCanvasX, toCanvasY };
+  plotState = { toCanvasX, toCanvasY };
 }
 
 // ---------------------------------------------------------------------------
 // Tooltip
 // ---------------------------------------------------------------------------
 
-function fmt(label, value, width = 16) {
+function fmt(label, value, width = 18) {
   return label.padEnd(width) + value;
 }
 
 canvas.addEventListener("mousemove", (e) => {
-  if (!points || points.length === 0) return;
+  if (!points || !plotState) return;
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
-  const plot = canvas._plot;
-  if (!plot) return;
 
   const BASE_THRESHOLD = 22;
   let bestDist = BASE_THRESHOLD * BASE_THRESHOLD;
   let bestIdx = -1;
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
-    const cx = plot.toCanvasX(p.x);
-    const cy = plot.toCanvasY(p.y);
+    const cx = plotState.toCanvasX(p.x);
+    const cy = plotState.toCanvasY(p.y);
     const d2 = (mx - cx) ** 2 + (my - cy) ** 2;
     const threshold = Math.max(BASE_THRESHOLD, p.radius + 4);
     if (d2 < threshold * threshold && d2 < bestDist) { bestDist = d2; bestIdx = i; }
@@ -612,45 +605,40 @@ canvas.addEventListener("mousemove", (e) => {
   if (bestIdx >= 0) {
     const p = points[bestIdx];
     const m = p.metrics;
-    const score = p.x > 0 ? (p.y / p.x).toFixed(3) : "—";
+    const score = p.x > 0 ? (p.y / p.x).toFixed(3) : "\u2014";
 
-    const W = 18;
     const lines = [
-      ...(isAllView ? [fmt("Functions", m.function_count, W)] : []),
-      fmt("Score", score, W),
-      fmt("Statements", m.statement_count, W),
-      fmt("Comp. weight", p.y.toFixed(2), W),
-      "─".repeat(W + 6),
-      fmt("Math ops",        m.math_ops,           W),
-      fmt("Bitwise ops",     m.bitwise_ops,         W),
-      fmt("Logical ops",     m.logical_ops,         W),
-      fmt("Comparisons",     m.comparisons,         W),
-      fmt("Conditionals",    m.conditionals,        W),
-      fmt("Calls",           m.calls,               W),
-      fmt("Assertions",      m.assertions,          W),
-      fmt("Exc. handlers",   m.exception_handlers,  W),
+      ...(isAllView ? [fmt("Functions", m.function_count)] : []),
+      fmt("Score", score),
+      fmt("Statements", m.statement_count),
+      fmt("Comp. weight", p.y.toFixed(2)),
+      "\u2500".repeat(24),
+      fmt("Math ops",        m.math_ops),
+      fmt("Bitwise ops",     m.bitwise_ops),
+      fmt("Logical ops",     m.logical_ops),
+      fmt("Comparisons",     m.comparisons),
+      fmt("Conditionals",    m.conditionals),
+      fmt("Calls",           m.calls),
+      fmt("Assertions",      m.assertions),
+      fmt("Exc. handlers",   m.exception_handlers),
     ];
 
-    // Build tooltip HTML
     tooltipEl.innerHTML =
       `<span class="tt-name">${p.name}</span>` +
       `<hr class="tt-sep">` +
       lines.join("\n");
     tooltipEl.style.display = "block";
 
-    const container = canvas.parentElement.getBoundingClientRect();
+    const container = chartWrap.getBoundingClientRect();
     const ttW = tooltipEl.offsetWidth;
     const ttH = tooltipEl.offsetHeight;
     const cx = e.clientX - container.left;
     const cy = e.clientY - container.top;
     const GAP = 12;
-    // Prefer right of cursor, flip left if it would overflow
     let tx = cx + GAP;
     if (tx + ttW > container.width - 4) tx = cx - ttW - GAP;
-    // Prefer above cursor, flip below if it would overflow top
     let ty = cy - ttH - GAP;
     if (ty < 4) ty = cy + GAP;
-    // Final clamp to keep inside container
     tx = Math.max(4, Math.min(tx, container.width  - ttW - 4));
     ty = Math.max(4, Math.min(ty, container.height - ttH - 4));
     tooltipEl.style.left = tx + "px";
@@ -670,7 +658,7 @@ canvas.addEventListener("mouseleave", () => {
 // ---------------------------------------------------------------------------
 
 window.addEventListener("resize", draw);
-document.getElementById("description").textContent = DESCRIPTION_FUNCTIONS;
+descriptionEl.textContent = DESCRIPTION_FUNCTIONS;
 loadIndex();
 </script>
 </body>

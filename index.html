@@ -6,15 +6,14 @@
 <title>NutrisCode</title>
 <style>
   :root {
-    --bg: #fafafa;
+    --bg: #f5f5f5;
     --surface: #fff;
     --border: #e0e0e0;
     --text: #1a1a1a;
-    --text-muted: #666;
+    --text-muted: #777;
     --accent: #4a7cff;
-    --dot: rgba(74, 124, 255, 0.55);
-    --dot-hover: #ff6b35;
     --radius: 6px;
+    --sidebar-w: 220px;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -23,61 +22,133 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 24px 32px;
-    line-height: 1.5;
-  }
-
-  h1 {
-    font-size: 1.4rem;
-    font-weight: 600;
-    margin-bottom: 16px;
-  }
-
-  /* Controls bar */
-  .controls {
+    height: 100dvh;
     display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: end;
-    margin-bottom: 20px;
-    padding: 16px;
+    flex-direction: column;
+  }
+
+  /* Layout */
+  .app {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
   }
 
-  .control-group { display: flex; flex-direction: column; gap: 3px; }
-  .control-group label {
-    font-size: 0.75rem;
+  .sidebar h1 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .sidebar p {
+    font-size: 0.78rem;
     color: var(--text-muted);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    line-height: 1.55;
   }
 
-  select, input[type="number"] {
+  .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  select {
     font-family: inherit;
-    font-size: 0.85rem;
-    padding: 6px 10px;
+    font-size: 0.82rem;
+    padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--bg);
     color: var(--text);
     outline: none;
+    width: 100%;
   }
-  select:focus, input[type="number"]:focus { border-color: var(--accent); }
-  select { min-width: 180px; }
-  input[type="number"] { width: 72px; text-align: center; }
+  select:focus { border-color: var(--accent); }
 
-  .coeff-grid {
+  /* Coefficient rows */
+  .coeff-list { display: flex; flex-direction: column; gap: 5px; }
+  .coeff-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: end;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .coeff-row label {
+    font-size: 0.8rem;
+    color: var(--text);
+    flex: 1;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .coeff-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: #ccc;
+  }
+  input[type="number"] {
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    width: 52px;
+    text-align: center;
+  }
+  input[type="number"]:focus { border-color: var(--accent); }
+
+  /* Legend */
+  .legend { display: flex; flex-direction: column; gap: 5px; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.79rem;
+    color: var(--text);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
-  /* Chart */
-  .chart-container {
+  /* Main chart area */
+  .main {
+    flex: 1;
+    min-width: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chart-wrap {
+    flex: 1;
+    min-height: 0;
     position: relative;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -85,88 +156,142 @@
     padding: 8px;
   }
 
-  canvas { display: block; width: 100%; }
+  canvas { display: block; }
 
   /* Tooltip */
   .tooltip {
     display: none;
     position: absolute;
     pointer-events: none;
-    background: rgba(0, 0, 0, 0.85);
-    color: #fff;
-    font-size: 0.78rem;
-    padding: 8px 10px;
+    background: rgba(15, 15, 20, 0.92);
+    color: #f0f0f0;
+    font-size: 0.76rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    padding: 9px 11px;
     border-radius: var(--radius);
-    line-height: 1.45;
-    max-width: 360px;
-    white-space: pre-line;
+    line-height: 1.55;
     z-index: 10;
+    white-space: pre;
   }
-
-  .status {
-    text-align: center;
-    padding: 48px;
-    color: var(--text-muted);
-    font-size: 0.95rem;
+  .tooltip .tt-name {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #fff;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+  .tooltip .tt-sep {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    margin: 5px 0;
   }
 </style>
 </head>
 <body>
 
-<h1>NutrisCode</h1>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div>
+      <h1>NutrisCode</h1>
+    </div>
 
-<div class="controls">
-  <div class="control-group">
-    <label>Dataset</label>
-    <select id="file-select"><option value="">Loading…</option></select>
-  </div>
+    <p>Each dot is a function. The x-axis shows its statement count; the y-axis shows the weighted sum of its operations — a measure of computational richness. The dashed diagonal marks a score of&nbsp;0.5: functions above it pack more operations relative to their size.</p>
 
-  <div class="coeff-grid" id="coeff-grid"></div>
-</div>
+    <div class="sidebar-section">
+      <div class="section-label">Dataset</div>
+      <select id="file-select"><option value="">Loading…</option></select>
+    </div>
 
-<div class="chart-container">
-  <canvas id="chart"></canvas>
-  <div class="tooltip" id="tooltip"></div>
+    <div class="sidebar-section">
+      <div class="section-label">Coefficients</div>
+      <div class="coeff-list" id="coeff-list"></div>
+    </div>
+
+    <div class="sidebar-section" id="legend-section" style="display:none">
+      <div class="section-label">Modules</div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </aside>
+
+  <!-- Chart -->
+  <main class="main">
+    <div class="chart-wrap" id="chart-wrap">
+      <canvas id="chart"></canvas>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+  </main>
 </div>
 
 <script>
 const RESULTS_DIR = "results";
 
 const COEFFICIENTS = [
-  { key: "math_ops",           label: "Math",       default: 1.0 },
-  { key: "bitwise_ops",        label: "Bitwise",    default: 0.9 },
-  { key: "logical_ops",        label: "Logical",    default: 0.6 },
-  { key: "comparisons",        label: "Compare",    default: 0.5 },
-  { key: "conditionals",       label: "Cond",       default: 0.4 },
-  { key: "calls",              label: "Calls",      default: 0.3 },
-  { key: "assertions",         label: "Assert",     default: 0.2 },
-  { key: "exception_handlers", label: "Except",     default: 0.1 },
+  { key: "math_ops",           label: "Math ops",        default: 1.0 },
+  { key: "bitwise_ops",        label: "Bitwise ops",     default: 0.9 },
+  { key: "logical_ops",        label: "Logical ops",     default: 0.6 },
+  { key: "comparisons",        label: "Comparisons",     default: 0.5 },
+  { key: "conditionals",       label: "Conditionals",    default: 0.4 },
+  { key: "calls",              label: "Calls (n−1)",     default: 0.3 },
+  { key: "assertions",         label: "Assertions",      default: 0.2 },
+  { key: "exception_handlers", label: "Exc. handlers",   default: 0.1 },
+];
+
+// Distinct, accessible color palette for modules
+const PALETTE = [
+  "#4a7cff", "#e05c2e", "#2db576", "#c9a227", "#9b5de5",
+  "#0bb4c1", "#c9486e", "#44aadd", "#e07b39", "#3daa6e",
+  "#7c5cbf", "#c45e9a",
 ];
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-let rawData = null;   // { name: string, metrics: {...} }[]
-let points = null;    // { name, x, y, metrics }[] — recomputed on coeff change
-const coeffs = {};    // key -> current value
-const PADDING = { top: 20, right: 20, bottom: 44, left: 56 };
-const DOT_RADIUS = 3;
+let rawData = null;      // [{ name, metrics }]
+let points = null;       // [{ name, x, y, metrics, module, color }]
+let isAllView = false;   // true when _all.json is loaded (repo summaries)
+const coeffs = {};
+const moduleColorMap = {};
+let paletteIdx = 0;
+const PADDING = { top: 24, right: 28, bottom: 46, left: 58 };
+const DOT_RADIUS = 3.5;
 let hoveredIdx = -1;
+
+// ---------------------------------------------------------------------------
+// Module color assignment
+// ---------------------------------------------------------------------------
+
+function moduleColor(name) {
+  const mod = name.split(".")[0];
+  if (!moduleColorMap[mod]) {
+    moduleColorMap[mod] = PALETTE[paletteIdx++ % PALETTE.length];
+  }
+  return moduleColorMap[mod];
+}
 
 // ---------------------------------------------------------------------------
 // Coefficient controls
 // ---------------------------------------------------------------------------
 
-const coeffGrid = document.getElementById("coeff-grid");
+const coeffList = document.getElementById("coeff-list");
 for (const c of COEFFICIENTS) {
   coeffs[c.key] = c.default;
-  const group = document.createElement("div");
-  group.className = "control-group";
-  group.innerHTML = `<label>${c.label}</label>
-    <input type="number" id="coeff-${c.key}" value="${c.default}" min="0" max="1" step="0.1">`;
-  coeffGrid.appendChild(group);
-  group.querySelector("input").addEventListener("input", (e) => {
+  const row = document.createElement("div");
+  row.className = "coeff-row";
+  row.innerHTML = `
+    <label>
+      <span class="coeff-swatch"></span>
+      ${c.label}
+    </label>
+    <input type="number" value="${c.default}" min="0" max="1" step="0.1">`;
+  coeffList.appendChild(row);
+  row.querySelector("input").addEventListener("input", (e) => {
     const v = parseFloat(e.target.value);
     if (!isNaN(v) && v >= 0 && v <= 1) {
       coeffs[c.key] = v;
@@ -184,7 +309,6 @@ function weightedSum(m) {
   let sum = 0;
   for (const c of COEFFICIENTS) {
     const count = m[c.key] || 0;
-    // "First call is free" — only count calls beyond the first
     sum += coeffs[c.key] * (c.key === "calls" ? Math.max(0, count - 1) : count);
   }
   return sum;
@@ -192,12 +316,47 @@ function weightedSum(m) {
 
 function recompute() {
   if (!rawData) return;
-  points = rawData.map((d) => ({
-    name: d.name,
-    x: d.metrics.statement_count,
-    y: weightedSum(d.metrics),
-    metrics: d.metrics,
-  }));
+  // Reset color map so module ordering is stable per dataset
+  for (const k of Object.keys(moduleColorMap)) delete moduleColorMap[k];
+  paletteIdx = 0;
+
+  points = rawData.map((d) => {
+    const color = moduleColor(d.name);
+    return {
+      name: d.name,
+      x: d.metrics.statement_count,
+      y: weightedSum(d.metrics),
+      metrics: d.metrics,
+      module: d.name.split(".")[0],
+      color,
+    };
+  });
+
+  // Sort by module so same-color dots render together (avoids z-order confusion)
+  points.sort((a, b) => a.module.localeCompare(b.module));
+  updateLegend();
+}
+
+// ---------------------------------------------------------------------------
+// Legend
+// ---------------------------------------------------------------------------
+
+function updateLegend() {
+  const legendSection = document.getElementById("legend-section");
+  const legend = document.getElementById("legend");
+  if (!points) { legendSection.style.display = "none"; return; }
+
+  const modules = [...new Set(points.map(p => p.module))].sort();
+  if (modules.length <= 1) { legendSection.style.display = "none"; return; }
+
+  legendSection.style.display = "";
+  legend.innerHTML = modules.map(mod => {
+    const color = moduleColorMap[mod] || "#ccc";
+    return `<div class="legend-item">
+      <div class="legend-dot" style="background:${color}"></div>
+      <span>${mod}</span>
+    </div>`;
+  }).join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +375,7 @@ async function loadIndex() {
     ).join("");
     if (files.length > 0) loadFile(files[0]);
   } catch {
-    fileSelect.innerHTML = '<option value="">No results found — run analyze_repo.py first</option>';
+    fileSelect.innerHTML = '<option value="">No results — run analyze_repo.py first</option>';
   }
 }
 
@@ -225,6 +384,7 @@ fileSelect.addEventListener("change", () => {
 });
 
 async function loadFile(filename) {
+  isAllView = filename === "_all.json";
   try {
     const resp = await fetch(`${RESULTS_DIR}/${filename}`);
     const data = await resp.json();
@@ -234,6 +394,7 @@ async function loadFile(filename) {
   } catch {
     rawData = null;
     points = null;
+    updateLegend();
     draw();
   }
 }
@@ -247,9 +408,10 @@ const ctx = canvas.getContext("2d");
 const tooltipEl = document.getElementById("tooltip");
 
 function resize() {
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const w = rect.width - 16;  // account for container padding
-  const h = Math.max(400, Math.min(w * 0.55, 640));
+  const wrap = document.getElementById("chart-wrap");
+  const rect = wrap.getBoundingClientRect();
+  const w = rect.width - 16;
+  const h = rect.height - 16;
   const dpr = window.devicePixelRatio || 1;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
@@ -259,14 +421,24 @@ function resize() {
   return { w, h };
 }
 
+function niceTicks(max) {
+  // Return a nice step size that gives ~5 ticks
+  const rough = max / 5;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+  const normalized = rough / magnitude;
+  const step = normalized < 1.5 ? 1 : normalized < 3.5 ? 2 : normalized < 7.5 ? 5 : 10;
+  return step * magnitude;
+}
+
 function draw() {
   const { w, h } = resize();
   ctx.clearRect(0, 0, w, h);
 
   if (!points || points.length === 0) {
-    ctx.fillStyle = "#999";
-    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#aaa";
+    ctx.font = "13px sans-serif";
     ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     ctx.fillText("No data loaded", w / 2, h / 2);
     return;
   }
@@ -274,113 +446,124 @@ function draw() {
   const plotW = w - PADDING.left - PADDING.right;
   const plotH = h - PADDING.top - PADDING.bottom;
 
-  // Axis ranges
   let maxX = 0, maxY = 0;
   for (const p of points) {
     if (p.x > maxX) maxX = p.x;
     if (p.y > maxY) maxY = p.y;
   }
-  // Add 10% headroom, minimum 1
-  maxX = Math.max(1, Math.ceil(maxX * 1.1));
-  maxY = Math.max(1, Math.ceil(maxY * 1.1));
+  maxX = Math.max(1, maxX * 1.12);
+  maxY = Math.max(1, maxY * 1.12);
 
-  function toCanvasX(v) { return PADDING.left + (v / maxX) * plotW; }
-  function toCanvasY(v) { return PADDING.top + plotH - (v / maxY) * plotH; }
+  const toCanvasX = (v) => PADDING.left + (v / maxX) * plotW;
+  const toCanvasY = (v) => PADDING.top + plotH - (v / maxY) * plotH;
 
-  // Grid lines and labels
-  ctx.strokeStyle = "#eee";
+  // Grid + tick labels
+  const xStep = niceTicks(maxX);
+  const yStep = niceTicks(maxY);
+
+  ctx.strokeStyle = "#efefef";
   ctx.lineWidth = 1;
-  ctx.fillStyle = "#999";
+  ctx.fillStyle = "#aaa";
   ctx.font = "11px sans-serif";
-
-  const xTicks = niceTickCount(maxX);
-  const yTicks = niceTickCount(maxY);
 
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  for (let i = 0; i <= xTicks; i++) {
-    const v = Math.round((maxX / xTicks) * i);
+  for (let v = 0; v <= maxX + xStep * 0.01; v += xStep) {
     const cx = toCanvasX(v);
+    if (cx > PADDING.left + plotW + 1) break;
     ctx.beginPath(); ctx.moveTo(cx, PADDING.top); ctx.lineTo(cx, PADDING.top + plotH); ctx.stroke();
-    ctx.fillText(v, cx, PADDING.top + plotH + 6);
+    ctx.fillText(Math.round(v), cx, PADDING.top + plotH + 6);
   }
 
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  for (let i = 0; i <= yTicks; i++) {
-    const v = +((maxY / yTicks) * i).toFixed(1);
+  for (let v = 0; v <= maxY + yStep * 0.01; v += yStep) {
     const cy = toCanvasY(v);
+    if (cy < PADDING.top - 1) break;
     ctx.beginPath(); ctx.moveTo(PADDING.left, cy); ctx.lineTo(PADDING.left + plotW, cy); ctx.stroke();
-    ctx.fillText(v, PADDING.left - 8, cy);
+    ctx.fillText(+v.toFixed(1), PADDING.left - 8, cy);
   }
 
   // Axis labels
-  ctx.fillStyle = "#666";
+  ctx.fillStyle = "#888";
   ctx.font = "12px sans-serif";
   ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillText("Statements", PADDING.left + plotW / 2, h - 10);
+  ctx.textBaseline = "bottom";
+  ctx.fillText("Statements", PADDING.left + plotW / 2, h - 4);
 
   ctx.save();
-  ctx.translate(14, PADDING.top + plotH / 2);
+  ctx.translate(13, PADDING.top + plotH / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.textBaseline = "bottom";
-  ctx.fillText("Weighted Sum", 0, 0);
+  ctx.textBaseline = "top";
+  ctx.fillText("Computational Weight", 0, 0);
   ctx.restore();
 
-  // Score = 0.5 diagonal line: y = 0.5 * x
+  // Score = 0.5 diagonal: y = 0.5 * x
   ctx.save();
-  ctx.setLineDash([6, 4]);
-  ctx.strokeStyle = "#ccc";
-  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = "#d8d8d8";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  const lineEndX = Math.min(maxX, maxY / 0.5);
+  const diagonalEndX = Math.min(maxX, maxY / 0.5);
   ctx.moveTo(toCanvasX(0), toCanvasY(0));
-  ctx.lineTo(toCanvasX(lineEndX), toCanvasY(0.5 * lineEndX));
+  ctx.lineTo(toCanvasX(diagonalEndX), toCanvasY(0.5 * diagonalEndX));
   ctx.stroke();
-  // Label
-  ctx.setLineDash([]);
-  ctx.fillStyle = "#bbb";
-  ctx.font = "10px sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "bottom";
-  const lblX = Math.min(lineEndX * 0.85, maxX * 0.9);
-  ctx.fillText("score = 0.5", toCanvasX(lblX) + 4, toCanvasY(0.5 * lblX) - 4);
   ctx.restore();
 
   // Plot border
-  ctx.strokeStyle = "#ddd";
+  ctx.strokeStyle = "#e0e0e0";
   ctx.lineWidth = 1;
-  ctx.setLineDash([]);
   ctx.strokeRect(PADDING.left, PADDING.top, plotW, plotH);
 
-  // Dots
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const cx = toCanvasX(p.x);
-    const cy = toCanvasY(p.y);
-    // Clip to plot area
-    if (cx < PADDING.left || cx > PADDING.left + plotW || cy < PADDING.top || cy > PADDING.top + plotH) continue;
-    ctx.beginPath();
-    ctx.arc(cx, cy, i === hoveredIdx ? DOT_RADIUS + 2 : DOT_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = i === hoveredIdx ? "var(--dot-hover)" : "var(--dot)";
-    ctx.fill();
+  // Dots (non-hovered first, hovered last so it renders on top)
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < points.length; i++) {
+      if (pass === 0 && i === hoveredIdx) continue;
+      if (pass === 1 && i !== hoveredIdx) continue;
+      const p = points[i];
+      const cx = toCanvasX(p.x);
+      const cy = toCanvasY(p.y);
+      if (cx < PADDING.left - 1 || cx > PADDING.left + plotW + 1 ||
+          cy < PADDING.top - 1  || cy > PADDING.top  + plotH + 1) continue;
+
+      const isHovered = i === hoveredIdx;
+      ctx.beginPath();
+      ctx.arc(cx, cy, isHovered ? DOT_RADIUS + 2.5 : DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = isHovered
+        ? p.color
+        : p.color + (points.length > 500 ? "88" : "aa");
+      ctx.fill();
+      if (isHovered) {
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
   }
 
-  // Store transform info for hit testing
-  canvas._plot = { maxX, maxY, plotW, plotH, toCanvasX, toCanvasY };
-}
+  // Labels for _all view (repo names next to dots)
+  if (isAllView) {
+    ctx.font = "11px sans-serif";
+    ctx.textBaseline = "middle";
+    for (const p of points) {
+      const cx = toCanvasX(p.x);
+      const cy = toCanvasY(p.y);
+      ctx.fillStyle = p.color;
+      ctx.textAlign = "left";
+      ctx.fillText(p.name, cx + DOT_RADIUS + 4, cy);
+    }
+  }
 
-function niceTickCount(max) {
-  if (max <= 5) return max;
-  if (max <= 10) return 5;
-  if (max <= 20) return 5;
-  return 5;
+  canvas._plot = { maxX, maxY, toCanvasX, toCanvasY };
 }
 
 // ---------------------------------------------------------------------------
-// Tooltip / hover
+// Tooltip
 // ---------------------------------------------------------------------------
+
+function fmt(label, value, width = 16) {
+  return label.padEnd(width) + value;
+}
 
 canvas.addEventListener("mousemove", (e) => {
   if (!points || points.length === 0) return;
@@ -390,44 +573,51 @@ canvas.addEventListener("mousemove", (e) => {
   const plot = canvas._plot;
   if (!plot) return;
 
-  // Find nearest point within threshold
-  let bestDist = 20 * 20; // 20px threshold squared
+  let bestDist = 22 * 22;
   let bestIdx = -1;
   for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const cx = plot.toCanvasX(p.x);
-    const cy = plot.toCanvasY(p.y);
-    const dx = mx - cx, dy = my - cy;
-    const d2 = dx * dx + dy * dy;
+    const cx = plot.toCanvasX(points[i].x);
+    const cy = plot.toCanvasY(points[i].y);
+    const d2 = (mx - cx) ** 2 + (my - cy) ** 2;
     if (d2 < bestDist) { bestDist = d2; bestIdx = i; }
   }
 
-  if (bestIdx !== hoveredIdx) {
-    hoveredIdx = bestIdx;
-    draw();
-  }
+  if (bestIdx !== hoveredIdx) { hoveredIdx = bestIdx; draw(); }
 
   if (bestIdx >= 0) {
     const p = points[bestIdx];
     const m = p.metrics;
     const score = p.x > 0 ? (p.y / p.x).toFixed(3) : "—";
+
+    const W = 18;
     const lines = [
-      p.name,
-      `Score: ${score}  |  Weighted sum: ${p.y.toFixed(2)}`,
-      `Statements: ${m.statement_count}  Math: ${m.math_ops}  Bitwise: ${m.bitwise_ops}`,
-      `Cond: ${m.conditionals}  Logical: ${m.logical_ops}  Compare: ${m.comparisons}`,
-      `Calls: ${m.calls}  Assert: ${m.assertions}  Except: ${m.exception_handlers}`,
+      fmt("Score", score, W),
+      fmt("Statements", m.statement_count, W),
+      fmt("Comp. weight", p.y.toFixed(2), W),
+      "─".repeat(W + 6),
+      fmt("Math ops",        m.math_ops,           W),
+      fmt("Bitwise ops",     m.bitwise_ops,         W),
+      fmt("Logical ops",     m.logical_ops,         W),
+      fmt("Comparisons",     m.comparisons,         W),
+      fmt("Conditionals",    m.conditionals,        W),
+      fmt("Calls",           m.calls,               W),
+      fmt("Assertions",      m.assertions,          W),
+      fmt("Exc. handlers",   m.exception_handlers,  W),
     ];
-    tooltipEl.textContent = lines.join("\n");
+
+    // Build tooltip HTML
+    tooltipEl.innerHTML =
+      `<span class="tt-name">${p.name}</span>` +
+      `<hr class="tt-sep">` +
+      lines.join("\n");
     tooltipEl.style.display = "block";
 
-    // Position tooltip near cursor, but keep it inside the chart
     const container = canvas.parentElement.getBoundingClientRect();
-    let tx = e.clientX - container.left + 14;
-    let ty = e.clientY - container.top - 10;
-    // Prevent overflow right
-    if (tx + 300 > container.width) tx = e.clientX - container.left - 300;
-    if (ty < 0) ty = 10;
+    let tx = e.clientX - container.left + 16;
+    let ty = e.clientY - container.top - 16;
+    const ttW = 230;
+    if (tx + ttW > container.width - 8) tx = e.clientX - container.left - ttW - 8;
+    if (ty < 8) ty = 8;
     tooltipEl.style.left = tx + "px";
     tooltipEl.style.top = ty + "px";
   } else {
@@ -436,10 +626,7 @@ canvas.addEventListener("mousemove", (e) => {
 });
 
 canvas.addEventListener("mouseleave", () => {
-  if (hoveredIdx >= 0) {
-    hoveredIdx = -1;
-    draw();
-  }
+  if (hoveredIdx >= 0) { hoveredIdx = -1; draw(); }
   tooltipEl.style.display = "none";
 });
 

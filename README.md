@@ -1,4 +1,4 @@
-# Nutri-Scode: Compute a Nutri-Score for Your Code
+# Nutri-SCode: Compute a Nutri-Score for Your Code
 
 A static analysis tool that ranks functions by their **computational density**: the ratio of meaningful work (arithmetic, decisions, logic) to structural volume (statements). Functions with low scores are candidates for simplification or removal; functions with high scores are doing real work and deserve attention when something goes wrong.
 

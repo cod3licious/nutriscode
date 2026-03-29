@@ -4,6 +4,10 @@ A static analysis tool that ranks functions by their **computational density**: 
 
 A Python script using the tree-sitter library analyzes a repository to count the statements and computations of each function, with results saved in a JSON file. This file can then be loaded by `index.html` to display the results as a scatter plot that shows the functions' weighted sum of their computations against the number of statements. Additionally, combined results from all functions in the codebase are derived to make it possible to compare whole repositories in a similar fashion.
 
+**You can find a demo comparing several popular Python packages [here](https://franziskahorn.de/demo_nutriscode/):**
+
+![](https://franziskahorn.de/demo_nutriscode/nutriscode_ui.png)
+
 ### The Problem This Solves
 
 Most approaches to identifying technical debt focus on *structural* properties: cyclic dependencies, coupling between modules, inconsistent layering. These are real problems, but they miss a different class of issues: code that is structurally clean but contains more ceremony than substance.
@@ -61,6 +65,7 @@ The score identifies ceremony by its absence of operations. It does not identify
 - **Correct structure, wrong boundaries** — modules that are internally clean but decomposed along the wrong axis (use Tornhill's change coupling analysis for this)
 - **Cyclic dependencies and erosion** — structural health of the module graph (use tools like Sonargraph or ArchUnit)
 - **Complex code that should be simpler** — high-scoring functions that implement something complex because of a poor approach rather than genuine problem complexity (requires human review)
+- **Operator overloading and string concatenation** — the AST cannot distinguish `a + b` on numbers from `a + b` on strings, so string concatenation with `+`/`+=` is counted as a math operation, slightly inflating scores for functions that build strings with `+` instead of f-strings or `.join()`
 - **Logic hidden in SQL strings, regex patterns, or other embedded DSLs** — string literals are opaque to the AST parser
 
 It is intended to complement, not replace, structural analysis and behavioral analysis (commit frequency, change coupling).

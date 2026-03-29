@@ -6,11 +6,11 @@ A Python script using the tree-sitter library analyzes a repository to count the
 
 ### The Problem This Solves
 
-Most approaches to identifying technical debt focus on *structural* properties: cyclic dependencies, coupling between modules, inconsistent layering. These are real problems, but they miss a different class of issue: code that is structurally clean but contains more ceremony than substance.
+Most approaches to identifying technical debt focus on *structural* properties: cyclic dependencies, coupling between modules, inconsistent layering. These are real problems, but they miss a different class of issues: code that is structurally clean but contains more ceremony than substance.
 
 A codebase can have perfect modularity scores and still be exhausting to work in because a large fraction of its functions are boilerplate: DTOs that mirror each other field-for-field, mappers that rename fields between identical representations, service classes that do nothing but delegate to a single other function, pass-through wrappers that exist to satisfy an abstraction that doesn't earn its keep. None of this shows up as a structural violation. It just makes every change touch more files than it should.
 
-Nutri-Scode addresses this by asking a different question: **not where the code is structured badly, but where the code is doing less than its volume implies**.
+Nutri-SCode addresses this by asking a different question: **not where the code is structured badly, but where the code is doing less than its volume implies**.
 
 ## The Core Idea
 
@@ -24,9 +24,9 @@ The score for a function is:
 score = weighted_sum_of_operations / max(statement_count, 1)
 ```
 
-Though normally you'd just look at the operations vs. the statements count directly in a scatter plot. 
+Though normally you'd just look at the operation vs. statement counts directly in a scatter plot. 
 
-The coefficients for the weighted sum are:
+The coefficients for the weighted sum are configurable in the web app with the following default values:
 
 | Element | Weight | Rationale |
 |---------|--------|-----------|
@@ -39,7 +39,6 @@ The coefficients for the weighted sum are:
 | Assertions (`assert`) | 0.2 | Encode invariants; count higher when combined with comparisons |
 | Exception handlers (`catch`, `except`, `finally`) | 0.1 | Control flow, but rarely encodes domain logic |
 
-All weights are configurable constants at the top of the script.
 
 ### Interpreting the Score
 
@@ -111,17 +110,17 @@ This will create a folder `results/` in the root directory (if one does not alre
 **Examples:**
 
 ```bash
-# Analyse a TypeScript project, print to stdout
+# Analyze a TypeScript project
 uv run src/analyze_repo.py ./myproject ts
 
-# Raise the minimum statement threshold to reduce noise
+# Analyze a Java project and raise the minimum statement threshold to reduce noise
 uv run src/analyze_repo.py ./myproject java --min-statements 2
 ```
 
 **Run the tests:**
 
 ```bash
-uv run pytest tests/
+uv run pytest
 ```
 
 ### Running the frontend
